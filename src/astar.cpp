@@ -1,4 +1,4 @@
-#include "astar.h"
+﻿#include "astar.h"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -16,44 +16,72 @@ void Grid::setBlocked(Cell c, bool value) {
     if (!contains(c)) throw std::out_of_range("Cell outside grid");
     obstacles_[static_cast<std::size_t>(c.y) * width_ + c.x] = value;
 }
-std::vector<Cell> findPath(const Grid& grid, Cell start, Cell goal) {
-    if (grid.blocked(start) || grid.blocked(goal)) return {};
-    struct Node { Cell cell; int g; double f; Cell parent; };
-    auto h = [goal](Cell c) {
-        return std::hypot(static_cast<double>(c.x) - goal.x, static_cast<double>(c.y) - goal.y);
-    };
-    Node current{start, 0, h(start), start};
-    std::vector<Node> open, closed{current};
-    constexpr Cell directions[]{{0,-1}, {0,1}, {-1,0}, {1,0}};
-    while (!(current.cell == goal)) {
-        for (Cell d : directions) {
-            Cell next{current.cell.x + d.x, current.cell.y + d.y};
-            if (grid.blocked(next)) continue;
-            auto matches = [next](const Node& n) { return n.cell == next; };
-            if (std::find_if(closed.begin(), closed.end(), matches) != closed.end()) continue;
-            Node neighbor{next, current.g + 1, current.g + 1 + h(next), current.cell};
-            auto existing = std::find_if(open.begin(), open.end(), matches);
-            if (existing == open.end()) open.push_back(neighbor);
-            else if (neighbor.f < existing->f) *existing = neighbor;
+AStarSearch::AStarSearch(const Grid& grid, Cell start, Cell goal)
+    : grid_(grid), start_(start), goal_(goal) { reset(); }
+double AStarSearch::heuristic(Cell c) const {
+    return std::hypot(static_cast<double>(c.x) - goal_.x, static_cast<double>(c.y) - goal_.y);
+}
+void AStarSearch::reset() {
+    open_.clear(); closed_.clear(); path_.clear(); current_.reset(); iterations_ = 0;
+    status_ = SearchStatus::READY;
+    if (grid_.blocked(start_) || grid_.blocked(goal_)) {
+        status_ = SearchStatus::INVALID_ENDPOINTS;
+        return;
+    }
+    const double h = heuristic(start_);
+    open_.push_back({start_, 0, h, h, start_});
+}
+bool AStarSearch::step() {
+    if (status_ != SearchStatus::READY && status_ != SearchStatus::SEARCHING) return false;
+    if (open_.empty()) { status_ = SearchStatus::NO_PATH; return false; }
+    std::size_t best = 0;
+    for (std::size_t i = 0; i < open_.size(); ++i)
+        if (open_[i].f <= open_[best].f) best = i; // Original tie rule.
+    const SearchNode node = open_[best];
+    open_.erase(open_.begin() + best);
+    current_ = node;
+    closed_.push_back(node);
+    ++iterations_;
+    status_ = SearchStatus::SEARCHING;
+    if (node.cell == goal_) {
+        Cell cursor = goal_;
+        path_.push_back(cursor);
+        while (!(cursor == start_)) {
+            auto found = std::find_if(closed_.begin(), closed_.end(), [cursor](const SearchNode& n) {
+                return n.cell == cursor;
+            });
+            if (found == closed_.end()) throw std::logic_error("Missing parent");
+            cursor = found->parent;
+            path_.push_back(cursor);
         }
-        if (open.empty()) return {};
-        std::size_t best = 0;
-        for (std::size_t i = 0; i < open.size(); ++i)
-            if (open[i].f <= open[best].f) best = i; // Original tie rule.
-        current = open[best];
-        open.erase(open.begin() + best);
-        closed.push_back(current);
+        std::reverse(path_.begin(), path_.end());
+        status_ = SearchStatus::PATH_FOUND;
+        return true;
     }
-    std::vector<Cell> path{current.cell};
-    while (!(current.cell == start)) {
-        Cell parent = current.parent;
-        auto found = std::find_if(closed.begin(), closed.end(), [parent](const Node& n) {
-            return n.cell == parent;
-        });
-        if (found == closed.end()) throw std::logic_error("Missing parent");
-        current = *found;
-        path.push_back(current.cell);
+    constexpr Cell directions[]{{0,-1}, {0,1}, {-1,0}, {1,0}};
+    for (Cell d : directions) {
+        Cell next{node.cell.x + d.x, node.cell.y + d.y};
+        if (grid_.blocked(next)) continue;
+        auto matches = [next](const SearchNode& n) { return n.cell == next; };
+        if (std::find_if(closed_.begin(), closed_.end(), matches) != closed_.end()) continue;
+        double h = heuristic(next);
+        SearchNode neighbor{next, node.g + 1, h, node.g + 1 + h, node.cell};
+        auto existing = std::find_if(open_.begin(), open_.end(), matches);
+        if (existing == open_.end()) open_.push_back(neighbor);
+        else if (neighbor.f < existing->f) *existing = neighbor;
     }
-    std::reverse(path.begin(), path.end());
-    return path;
+    if (open_.empty()) status_ = SearchStatus::NO_PATH;
+    return true;
+}
+CellState AStarSearch::state(Cell cell) const {
+    if (current_ && current_->cell == cell) return CellState::CURRENT;
+    auto matches = [cell](const SearchNode& n) { return n.cell == cell; };
+    if (std::find_if(open_.begin(), open_.end(), matches) != open_.end()) return CellState::OPEN;
+    if (std::find_if(closed_.begin(), closed_.end(), matches) != closed_.end()) return CellState::CLOSED;
+    return CellState::UNVISITED;
+}
+std::vector<Cell> findPath(const Grid& grid, Cell start, Cell goal) {
+    AStarSearch search(grid, start, goal);
+    while (search.step()) {}
+    return search.path();
 }
