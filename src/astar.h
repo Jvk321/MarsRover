@@ -52,6 +52,6 @@ private:
     double heuristic(Cell cell) const;
 };
 
-// Synchronous convenience wrapper; the renderer uses AStarSearch::step instead.
+// Synchronous convenience wrapper; Simulation uses AStarSearch::step instead.
 // Includes both endpoints; empty means invalid endpoints or no route.
 std::vector<Cell> findPath(const Grid& grid, Cell start, Cell goal);

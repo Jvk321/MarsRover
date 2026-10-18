@@ -6,7 +6,6 @@
 #include "drive_audio_synth.h"
 #include <array>
 #include <string>
-#include <vector>
 namespace AudioConfig {
 constexpr float master=0.65f,ambient=0.32f,sfx=0.55f;
 constexpr float engineGain=DriveAudioConfig::engineVolume,windGain=DriveAudioConfig::windVolume;

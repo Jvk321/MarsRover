@@ -12,7 +12,16 @@
       "CMAKE_PREFIX_PATH": "C:/msys64/ucrt64"
     },
     "environment": {"PATH": "C:/msys64/ucrt64/bin;$penv{PATH}"}
+  }, {
+    "name": "release",
+    "displayName": "MSYS2 UCRT64 Release / Presentation",
+    "inherits": "ucrt64",
+    "binaryDir": "${sourceDir}/build/release",
+    "cacheVariables": {"CMAKE_BUILD_TYPE": "Release"}
   }],
-  "buildPresets": [{"name": "ucrt64", "configurePreset": "ucrt64"}],
-  "testPresets": [{"name": "ucrt64", "configurePreset": "ucrt64", "output": {"outputOnFailure": true}}]
+  "buildPresets": [{"name": "ucrt64", "configurePreset": "ucrt64"}, {"name": "release", "configurePreset": "release"}],
+  "testPresets": [
+    {"name": "ucrt64", "configurePreset": "ucrt64", "output": {"outputOnFailure": true}},
+    {"name": "release", "configurePreset": "release", "output": {"outputOnFailure": true}}
+  ]
 }

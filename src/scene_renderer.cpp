@@ -147,7 +147,7 @@ std::uint32_t SceneRenderer::tileHash(int x,int y,std::uint32_t seed) {
     h^=h>>16;h*=0x7feb352du;h^=h>>15;h*=0x846ca68bu;return h^(h>>16);
 }
 void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const WorldCamera& camera,
-                         const VisualEffects& effects,Rectangle v,std::optional<Cell> hovered) const {
+                         const VisualEffects& effects,Rectangle v,std::optional<Cell> hovered,bool showCosts) const {
     const auto& grid=terrain.grid;const auto& search=sim.search();
     const auto& view=camera.view();const bool editing=sim.status()==SimulationStatus::EDIT_MAP;
     const auto& storm=effects.sandstorm();
@@ -159,11 +159,18 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
     Rectangle visible{lo.x-90,lo.y-90,hi.x-lo.x+180,hi.y-lo.y+180};
     auto onScreen=[&](Vector2 p){return CheckCollisionPointRec(p,visible);};
     const auto count=static_cast<std::size_t>(grid.width())*grid.height();
-    std::vector<CellState> states(count,CellState::UNVISITED);
+    states_.assign(count,CellState::UNVISITED);
+    if(showCosts) nodes_.assign(count,nullptr);
     auto index=[&](Cell c){return static_cast<std::size_t>(c.y)*grid.width()+c.x;};
     if(!editing && sim.status()!=SimulationStatus::ROUTE_BLOCKED) {
-        for(const auto& n:search.open()) states[index(n.cell)]=CellState::OPEN;
-        for(const auto& n:search.closed()) states[index(n.cell)]=CellState::CLOSED;
+        for(const auto& n:search.open()) {
+            states_[index(n.cell)]=CellState::OPEN;
+            if(showCosts) nodes_[index(n.cell)]=&n;
+        }
+        for(const auto& n:search.closed()) {
+            states_[index(n.cell)]=CellState::CLOSED;
+            if(showCosts) nodes_[index(n.cell)]=&n;
+        }
     }
     BeginMode2D(view);
     const bool detail=view.zoom>VisualConfig::detailZoomThreshold;
@@ -171,11 +178,11 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
         Cell c{x,y};Vector2 p=project(x+0.5f,y+0.5f);if(!onScreen(p)) continue;
         float haze=storm.haze(p,focus,view.zoom);
         ground(c,tileHash(x,y,terrain.config.seed),detail,terrain.config.seed,haze);
-        if(states[index(c)]==CellState::OPEN) {
+        if(states_[index(c)]==CellState::OPEN) {
             diamond(c,0,Fade(SKYBLUE,VisualConfig::openAlpha));
             diamond(c,0.12f,Fade(VisualConfig::cyan,0.38f),true,0.9f);
         }
-        if(states[index(c)]==CellState::CLOSED) diamond(c,0,Fade(Color{130,80,170,255},VisualConfig::closedAlpha));
+        if(states_[index(c)]==CellState::CLOSED) diamond(c,0,Fade(Color{130,80,170,255},VisualConfig::closedAlpha));
         if(editing && hovered && *hovered==c) diamond(c,0.03f,Fade(VisualConfig::cyan,0.8f),true,1.5f);
     }
     for(const auto& mark:effects.tracks()) {
@@ -229,9 +236,10 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
         diamond(search.path()[sim.revealed()],0.15f,Fade(VisualConfig::gold,0.65f+0.3f*std::sin(effects.time()*6)),true,2);
     diamond(terrain.start,0.2f,Fade(VisualConfig::cyan,0.5f),true,1);
     storm.drawGround(grid.width(),grid.height(),visible,focus,view.zoom);
-    Rover parked;
-    if(!sim.rover().available()) parked.reset({terrain.start});
-    const Rover& rover=sim.rover().available()?sim.rover():parked;
+    if(!parkedStart_ || !(*parkedStart_==terrain.start)) {
+        parked_.reset({terrain.start});parkedStart_=terrain.start;
+    }
+    const Rover& rover=sim.rover().available()?sim.rover():parked_;
     const int roverDepth=static_cast<int>(std::floor(rover.x()+rover.y()));
     bool roverDrawn=false;
     // Painter order by x+y: rocks, rover and goal beacon share the same depth order.
@@ -272,5 +280,26 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
         DrawLineEx({v.x+x,v.y+y},{v.x+x+2,v.y+y+1},1,Color{232,172,119,24});
     }
     storm.drawAir(v);
+    if(showCosts && !editing) {
+        // Screen-space labels remain legible; at fit zoom use the hover readout.
+        if(view.zoom>=1.8f) for(const auto* node:nodes_) {
+            if(!node || !onScreen(project(node->cell.x+0.5f,node->cell.y+0.5f))) continue;
+            Vector2 p=GetWorldToScreen2D(project(node->cell.x+0.5f,node->cell.y+0.5f),view);
+            int size=std::clamp(static_cast<int>(view.zoom*6),10,16);
+            for(int line=0;line<3;++line) {
+                const char* text=line==0?TextFormat("g %d",node->g):line==1?TextFormat("h %.1f",node->h):TextFormat("f %.1f",node->f);
+                int x=static_cast<int>(p.x)-MeasureText(text,size)/2;
+                int y=static_cast<int>(p.y)+(line-1)*size-size/2;
+                DrawText(text,x+1,y+1,size,Color{7,13,23,240});
+                DrawText(text,x,y,size,line==2?Color{255,236,158,255}:RAYWHITE);
+            }
+        }
+        Rectangle readout{v.x+12,v.y+v.height-66,std::min(510.0f,v.width-24),29};
+        DrawRectangleRounded(readout,0.15f,4,Color{10,24,35,235});
+        const SearchNode* node=hovered?nodes_[index(*hovered)]:nullptr;
+        const char* text=node?TextFormat("(%d,%d)  g %d  h %.2f  f %.2f",node->cell.x,node->cell.y,node->g,node->h,node->f):
+                              "COSTS: hover OPEN/CLOSED; zoom in for tile labels";
+        DrawText(text,static_cast<int>(readout.x+9),static_cast<int>(readout.y+7),16,RAYWHITE);
+    }
     EndScissorMode();
 }

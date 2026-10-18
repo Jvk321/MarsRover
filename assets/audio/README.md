@@ -14,7 +14,8 @@ Wind and engine are now continuous procedural streams (no short-file looping).
 | error.wav | No route / invalid endpoints |
 
 PCM WAV mono/stereo recommended; keep conservative levels.
-No files are downloaded. Runtime path is supplied by ROVER_AUDIO_DIR in src/CMakeLists.txt.
+No files are downloaded. CMake copies assets next to the executable;
+runtime files are read from `<executable directory>/assets/audio/`, independently of the working directory.
 Wind/engine parameters: src/drive_audio_synth.h (DriveAudioConfig).
 Sonar timing, sweep and ping: src/sonar.h (SonarConfig).
 Other defaults: src/audio_system.h (AudioConfig); generated one-shots: src/audio_system.cpp.

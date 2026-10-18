@@ -1,18 +1,17 @@
 #include "terrain_panel.h"
-#include "raylib.h"
-#include "visual_config.h"
+#include "ui_controls.h"
 #include <limits>
 namespace {
 bool action(Rectangle rect,const char* label) {
-    bool hover=CheckCollisionPointRec(GetMousePosition(),rect);
-    DrawRectangleRounded(rect,0.1f,4,hover ? Color{39,71,83,255}:Color{24,43,56,255});
-    DrawRectangleRoundedLines(rect,0.1f,4,Fade(VisualConfig::cyan,hover?0.8f:0.3f));
-    DrawText(label,static_cast<int>(rect.x+8),static_cast<int>(rect.y+10),18,RAYWHITE);
-    return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    return Ui::button(rect,label);
 }
 }
-TerrainPanel::TerrainPanel(TerrainConfig config) : fields_{std::to_string(config.width),std::to_string(config.height),
-    std::to_string(config.density),std::to_string(config.seed)} {}
+TerrainPanel::TerrainPanel(TerrainConfig config) { setConfig(config); }
+void TerrainPanel::setConfig(TerrainConfig config) {
+    fields_={std::to_string(config.width),std::to_string(config.height),
+             std::to_string(config.density),std::to_string(config.seed)};
+    focus_=-1;error_.clear();
+}
 std::optional<TerrainConfig> TerrainPanel::draw() {
     if (!open) return std::nullopt;
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),{0,0,0,180});

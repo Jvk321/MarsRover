@@ -4,7 +4,7 @@
 #include <cmath>
 float VisualEffects::randomFloat() { return (random_()%10000)/10000.0f; }
 void VisualEffects::reset(std::uint32_t seed) {
-    tracks_.clear();dust_.clear();sonar_.reset();random_.seed(seed);
+    tracks_.clear();dust_.clear();dust_.reserve(VisualConfig::maxDust);sonar_.reset();random_.seed(seed);
     hadPose_=false;wasMoving_=false;time_=emission_=0;previous_=SimulationStatus::READY;
     sandstorm_.reset(seed);
 }

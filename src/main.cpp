@@ -4,10 +4,14 @@
 #include "world_camera.h"
 #include "terrain_panel.h"
 #include "mission_feedback.h"
+#include "presentation.h"
+#include "ui_controls.h"
 #include "raylib.h"
 #include "rlgl.h"
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
+#include <exception>
 #include <random>
 #include <string>
 
@@ -44,11 +48,7 @@ const char* statusName(SimulationStatus status) {
     return "UNKNOWN";
 }
 bool button(Rectangle rect, const char* label, bool enabled = true) {
-    bool hover = enabled && !uiBlocked && CheckCollisionPointRec(GetMousePosition(), rect);
-    DrawRectangleRounded(rect,0.12f,4,!enabled ? Color{23,31,40,220} : hover ? Color{35,71,83,245} : Color{24,43,56,235});
-    DrawRectangleRoundedLines(rect,0.12f,4,Fade(VisualConfig::cyan,enabled?(hover?0.8f:0.3f):0.12f));
-    DrawText(label, static_cast<int>(rect.x + 10), static_cast<int>(rect.y + (rect.height-17)/2), 17, enabled ? Color{213,230,233,255} : Color{77,99,110,255});
-    bool pressed=hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    bool pressed=Ui::button(rect,label,enabled,uiBlocked);
     if(pressed && uiAudio) uiAudio->click();
     return pressed;
 }
@@ -57,11 +57,13 @@ int main(int argc,char** argv) {
     const bool snapshot=argc==3 && std::string(argv[1])=="--snapshot";
     int snapshotFrames=0;
     Terrain terrain(TerrainConfig{});
+    Terrain missionTerrain=terrain; // Replay/reset restore the generated or edited map, before DROP ROCK.
     const auto& grid=terrain.grid;
     const auto& start=terrain.start;
     const auto& goal=terrain.goal;
     TerrainPanel terrainPanel(terrain.config);
     std::optional<TerrainConfig> pendingTerrain;
+    bool playGenerated=false,pendingDemo=false,presentationMode=false,showCosts=false;
     EditTool editTool=EditTool::SET_START;
     std::optional<Cell> lastPaint;
     bool rightPaintValue=true;
@@ -78,27 +80,42 @@ int main(int argc,char** argv) {
     if (!IsWindowReady()) return 1;
     SetWindowMinSize(1000, 940);
     SetTargetFPS(60);
-    AudioSystem audio;audio.init(ROVER_AUDIO_DIR);audio.settings.enabled=!snapshot;uiAudio=&audio;
+    AudioSystem audio;audio.init((std::filesystem::path(GetApplicationDirectory())/"assets/audio").string());
+    audio.settings.enabled=!snapshot;uiAudio=&audio;
     MissionFeedback feedback;
     WorldCamera worldCamera(grid.width(),grid.height(),{300,140,980,790});
     SceneRenderer scene;
     VisualEffects effects; effects.reset(terrain.config.seed);
-    auto resetFeedback=[&](){audio.reset();feedback.reset();effects.setStorm(false);};
     std::size_t cameraPathSize = 0;
+    auto resetScene=[&](bool fitCamera) {
+        audio.reset();feedback.reset();effects.reset(terrain.config.seed);
+        effects.setStorm(false);effects.setStormIntensity(StormIntensity::MEDIUM);
+        cameraPathSize=0;rockRandom.seed(terrain.config.seed);
+        if(fitCamera) {worldCamera.reset();lastPaint.reset();}
+    };
+    auto resetMission=[&]() {
+        terrain=missionTerrain;obstacleCount=terrain.obstacleCount();
+        simulation.replaceMap(grid,start,goal,false);resetScene(true);
+    };
     while (!WindowShouldClose()) {
         const Rectangle viewport{300,140,static_cast<float>(GetScreenWidth()-300),static_cast<float>(GetScreenHeight()-170)};
         if (pendingTerrain) {
-            terrain=Terrain(*pendingTerrain); pendingTerrain.reset();
-            simulation.replaceMap(grid,start,goal,true);
-            bool autoCamera=worldCamera.automatic();
-            worldCamera=WorldCamera(grid.width(),grid.height(),viewport);
-            worldCamera.setAuto(autoCamera);
-            obstacleCount=terrain.obstacleCount(); cameraPathSize=0; lastPaint.reset();
-            rockRandom.seed(terrain.config.seed); effects.reset(terrain.config.seed);
-            resetFeedback();
+            try {
+                terrain=Terrain(*pendingTerrain);missionTerrain=terrain;
+                simulation.replaceMap(grid,start,goal,!playGenerated);
+                bool autoCamera=pendingDemo || worldCamera.automatic();
+                worldCamera=WorldCamera(grid.width(),grid.height(),viewport);
+                worldCamera.setAuto(autoCamera);
+                obstacleCount=terrain.obstacleCount();terrainPanel.setConfig(terrain.config);
+                resetScene(true);presentationMode=pendingDemo;
+                if(playGenerated) simulation.play();
+            } catch(const std::exception&) {
+                terrainPanel.showError("Cannot generate terrain. Check size or reduce dimensions.");
+            }
+            pendingTerrain.reset();playGenerated=false;pendingDemo=false;
         }
-        if(IsKeyPressed(KEY_F1) && !terrainPanel.open) { feedback.helpOpen=!feedback.helpOpen;feedback.audioOpen=false;simulation.pause(); }
-        if(IsKeyPressed(KEY_F2) && !terrainPanel.open) { feedback.audioOpen=!feedback.audioOpen;feedback.helpOpen=false;simulation.pause(); }
+        if(IsKeyPressed(KEY_F1) && !terrainPanel.open) { feedback.helpOpen=!feedback.helpOpen;feedback.audioOpen=feedback.presentationOpen=false;simulation.pause(); }
+        if(IsKeyPressed(KEY_F2) && !terrainPanel.open) { feedback.audioOpen=!feedback.audioOpen;feedback.helpOpen=feedback.presentationOpen=false;simulation.pause(); }
         if(IsKeyPressed(KEY_M)) audio.settings.enabled=!audio.settings.enabled;
         uiBlocked=terrainPanel.open || feedback.blocksInput();
         BeginDrawing();
@@ -112,7 +129,7 @@ int main(int argc,char** argv) {
         DrawRectangleRounded({308,0,static_cast<float>(GetScreenWidth()-316),132},0.03f,4,Color{16,28,39,235});
         DrawRectangleLinesEx({308,0,static_cast<float>(GetScreenWidth()-316),132},1,Fade(VisualConfig::cyan,0.23f));
         DrawText("ARES / NAVIGATION",20,19,23,VisualConfig::cyan);
-        DrawText("SIMULATION",20,250,10,VisualConfig::cyan);
+        DrawText("NAVIGATION",20,250,10,VisualConfig::cyan);
         DrawText("TELEMETRY",20,408,10,VisualConfig::cyan);
         DrawText("ROVER / DRIVE CONTROL",20,568,10,VisualConfig::cyan);
         DrawText("MAP / TERRAIN",320,2,10,VisualConfig::cyan);
@@ -127,7 +144,7 @@ int main(int argc,char** argv) {
         pause = pause || (!uiBlocked && IsKeyPressed(KEY_SPACE) && simulation.playing());
         step = step || (!uiBlocked && IsKeyPressed(KEY_N));
         reset = reset || (!uiBlocked && IsKeyPressed(KEY_R));
-        if (reset) { simulation.reset(); effects.reset(terrain.config.seed); resetFeedback(); }
+        if (reset) resetMission();
         else if (step) simulation.step();
         else if (pause) simulation.pause();
         else if (play) simulation.play();
@@ -158,19 +175,19 @@ int main(int argc,char** argv) {
         DrawText(simulation.playing() ? "LIVE  /  PLAYING" : "STANDBY  /  PAUSED",22,298,12,Color{124,151,166,255});
         if (search.current()) {
             const auto& n = *search.current();
-            DrawText(TextFormat("CURRENT x/y: %d / %d",n.cell.x,n.cell.y),20,334,18,RAYWHITE);
-            DrawText(TextFormat("g: %d   h: %.2f",n.g,n.h),20,362,18,RAYWHITE);
-            DrawText(TextFormat("f: %.2f",n.f),20,390,18,RAYWHITE);
+            DrawText(TextFormat("CURRENT x/y: %d / %d",n.cell.x,n.cell.y),20,328,18,RAYWHITE);
+            DrawText(TextFormat("g: %d   h: %.2f",n.g,n.h),20,355,18,RAYWHITE);
+            DrawText(TextFormat("f: %.2f",n.f),20,382,18,RAYWHITE);
         } else {
-            DrawText("CURRENT x/y: - / -",20,334,18,RAYWHITE);
-            DrawText("g: -   h: -   f: -",20,362,18,RAYWHITE);
+            DrawText("CURRENT x/y: - / -",20,328,18,RAYWHITE);
+            DrawText("g: -   h: -   f: -",20,355,18,RAYWHITE);
         }
         DrawText(TextFormat("OPEN: %d",static_cast<int>(search.open().size())),20,430,18,SKYBLUE);
         DrawText(TextFormat("CLOSED: %d",static_cast<int>(search.closed().size())),20,458,18,Color{170,130,210,255});
         DrawText(TextFormat("ITERATIONS: %d",static_cast<int>(search.iterations())),20,486,18,RAYWHITE);
-        DrawText(TextFormat("PATH LENGTH: %d",static_cast<int>(simulation.pathLength())),20,520,18,GOLD);
-        DrawText(TextFormat("REVEALED: %d / %d",static_cast<int>(simulation.revealed()),
-                            static_cast<int>(simulation.pathLength())),20,548,18,GOLD);
+        DrawText(TextFormat("PATH: %d  REVEALED: %d/%d",static_cast<int>(simulation.pathLength()),
+                           static_cast<int>(simulation.revealed()),static_cast<int>(simulation.pathLength())),20,520,17,GOLD);
+        DrawText(TextFormat("REPLANS: %d",static_cast<int>(simulation.replans())),20,548,18,ORANGE);
         const auto& rover = simulation.rover();
         if (rover.available()) {
             DrawText(TextFormat("ROVER x/y: %.2f / %.2f",rover.x(),rover.y()),20,680,18,RAYWHITE);
@@ -178,19 +195,20 @@ int main(int argc,char** argv) {
             DrawText(TextFormat("SEGMENT: %d / %d",static_cast<int>(segment),static_cast<int>(simulation.pathLength())),20,710,18,RAYWHITE);
             DrawText(TextFormat("TRAVELLED: %.2f / %d",rover.travelled(),static_cast<int>(simulation.pathLength())),20,740,18,GOLD);
         } else DrawText("ROVER: waiting for path",20,680,18,LIGHTGRAY);
-        DrawText(TextFormat("REPLANS: %d",static_cast<int>(simulation.replans())),20,780,18,ORANGE);
+        DrawText(TextFormat("MISSION TIME: %.1f s",feedback.missionTime()),20,780,18,RAYWHITE);
         DrawText(TextFormat("OLD PATH: %d",static_cast<int>(simulation.oldLength())),20,810,18,LIGHTGRAY);
         DrawText(search.path().empty() || simulation.status()==SimulationStatus::ROUTE_BLOCKED ? "NEW PATH: -" : TextFormat("NEW PATH: %d",static_cast<int>(simulation.pathLength())),20,840,18,GOLD);
         if (button({20,880,252,38},worldCamera.automatic() ? "AUTO CAMERA: ON" : "AUTO CAMERA: OFF"))
             worldCamera.setAuto(!worldCamera.automatic());
-        if (button({320,18,130,36},"NEW MAP")) {
-            simulation.reset();effects.reset(terrain.config.seed);resetFeedback();worldCamera.reset();cameraPathSize=0;terrainPanel.open=true;
+        if (button({320,18,100,36},"NEW MAP")) {
+            resetMission();terrainPanel.open=true;
         }
-        if (button({460,18,130,36},"GENERATE")) { pendingTerrain=terrain.config; simulation.pause(); }
-        if (button({600,18,130,36},"EDIT MAP")) { simulation.enterEdit(); effects.reset(terrain.config.seed); resetFeedback(); cameraPathSize=0; }
-        if (button({740,18,145,36},"CLEAR PATH")) {
-            simulation.replaceMap(grid,start,goal,simulation.status()==SimulationStatus::EDIT_MAP); effects.reset(terrain.config.seed); resetFeedback(); cameraPathSize=0;
+        if (button({430,18,100,36},"GENERATE")) { pendingTerrain=terrain.config; simulation.pause(); }
+        if (button({540,18,100,36},"EDIT MAP")) { simulation.enterEdit();missionTerrain=terrain;resetScene(false); }
+        if (button({650,18,110,36},"CLEAR PATH")) {
+            simulation.replaceMap(grid,start,goal,simulation.status()==SimulationStatus::EDIT_MAP);missionTerrain=terrain;resetScene(false);
         }
+        if(button({770,18,130,36},"PRESENTATION")) {feedback.presentationOpen=true;simulation.pause();}
         DrawText(TextFormat("MAP: %d x %d   OBSTACLES: %d / %.1f%%   SEED: %u",grid.width(),grid.height(),obstacleCount,
                             100.0*obstacleCount/(grid.width()*grid.height()),terrain.config.seed),320,59,17,LIGHTGRAY);
         const bool editing=simulation.status()==SimulationStatus::EDIT_MAP;
@@ -203,19 +221,20 @@ int main(int argc,char** argv) {
             }
             if(button({890,90,90,34},"AUDIO")) {feedback.audioOpen=true;simulation.pause();}
         } else {
-            if (button({320,90,145,34},"DROP ROCK",simulation.canDropRock())) {
+            if (button({320,90,180,34},presentationMode?"DEMO BLOCK ROUTE":"DROP ROCK",simulation.canDropRock())) {
                 if (auto rock=simulation.dropRock(rockRandom())) {
                     terrain.edit(*rock,EditTool::ADD_ROCK); obstacleCount=terrain.obstacleCount();
                     worldCamera.noticeRock(WorldCamera::project(rock->x+0.5,rock->y+0.5));
                     cameraPathSize=0;
                 }
             }
-            if(button({480,90,130,34},"AUDIO")) {feedback.audioOpen=true;simulation.pause();}
-            if(button({620,90,160,34},audio.settings.enabled?"SOUND: ON":"SOUND: OFF")) audio.settings.enabled=!audio.settings.enabled;
+            if(button({510,90,90,34},"AUDIO")) {feedback.audioOpen=true;simulation.pause();}
+            if(button({610,90,150,34},audio.settings.enabled?"SOUND: ON":"SOUND: OFF")) audio.settings.enabled=!audio.settings.enabled;
+            if(button({770,90,210,34},showCosts?"SHOW COSTS: ON":"SHOW COSTS: OFF")) showCosts=!showCosts;
         }
-        if(button({900,18,80,36},"HELP")) {feedback.helpOpen=true;simulation.pause();}
+        if(button({910,18,70,36},"HELP")) {feedback.helpOpen=true;simulation.pause();}
+        if(!uiBlocked && IsKeyPressed(KEY_C)) showCosts=!showCosts;
         worldCamera.resize(viewport);
-        if (reset) { worldCamera.reset(); cameraPathSize = 0; }
         if (search.path().size()!=cameraPathSize) {
             std::vector<Vector2> points;
             for (Cell c:search.path()) points.push_back(WorldCamera::project(c.x+0.5,c.y+0.5));
@@ -259,14 +278,16 @@ int main(int argc,char** argv) {
                 }
             }
             if (changed) {
-                simulation.replaceMap(grid,start,goal,true); effects.reset(terrain.config.seed); resetFeedback(); cameraPathSize=0; obstacleCount=terrain.obstacleCount();
+                simulation.replaceMap(grid,start,goal,true);missionTerrain=terrain;
+                resetScene(false);obstacleCount=terrain.obstacleCount();presentationMode=false;
             }
         }
         effects.update(GetFrameTime(),simulation,start);
         feedback.update(GetFrameTime(),simulation);
         audio.update(GetFrameTime(),simulation,effects.sandstorm());
         scene.draw(terrain,simulation,worldCamera,effects,viewport,
-                   editing && !terrainPanel.open ? hovered : std::nullopt);
+                   !uiBlocked ? hovered : std::nullopt,showCosts);
+        DrawText("OPEN: blue  /  CLOSED: violet  /  CURRENT: bright outline",320,GetScreenHeight()-48,14,Color{177,200,211,255});
         DrawText(editing ? "LMB: tool  /  RMB: paint" : "WASD / MMB: pan   WHEEL: zoom",320,GetScreenHeight()-22,15,Color{150,175,186,255});
         const char* stormNames[]{"LIGHT","MEDIUM","HEAVY"};
         if(button({static_cast<float>(GetScreenWidth()-370),static_cast<float>(GetScreenHeight()-28),120,24},
@@ -281,12 +302,17 @@ int main(int argc,char** argv) {
         if(terrainPanel.open && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) audio.click();
         if (auto config=terrainPanel.draw()) pendingTerrain=*config;
         auto feedbackAction=feedback.draw(viewport,terrain,simulation,audio);
-        if(feedbackAction!=FeedbackAction::NONE) {
-            resetFeedback();effects.reset(terrain.config.seed);cameraPathSize=0;worldCamera.reset();lastPaint.reset();
-            if(feedbackAction==FeedbackAction::NEW_MISSION) {simulation.reset();terrainPanel.open=true;}
-            if(feedbackAction==FeedbackAction::REPLAY) {simulation.reset();simulation.play();}
-            if(feedbackAction==FeedbackAction::RESET) simulation.reset();
-            if(feedbackAction==FeedbackAction::EDIT) simulation.enterEdit();
+        if(feedbackAction==FeedbackAction::START_MISSION) simulation.play();
+        if(feedbackAction==FeedbackAction::START_DEMO) {
+            const auto& preset=presentationPresets[feedback.selectedPreset];
+            pendingTerrain=preset.terrain;playGenerated=pendingDemo=true;
+            speed=static_cast<float>(preset.searchSpeed);drivingSpeed=static_cast<float>(preset.drivingSpeed);
+        }
+        if(feedbackAction==FeedbackAction::NEW_MISSION) {resetMission();terrainPanel.open=true;}
+        if(feedbackAction==FeedbackAction::REPLAY) {resetMission();simulation.play();}
+        if(feedbackAction==FeedbackAction::RESET) resetMission();
+        if(feedbackAction==FeedbackAction::EDIT) {
+            simulation.enterEdit();missionTerrain=terrain;resetScene(true);
         }
         if(snapshot && ++snapshotFrames==8) {
             rlDrawRenderBatchActive();

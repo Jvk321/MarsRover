@@ -13,11 +13,9 @@ public:
     bool canDropRock() const;
     const std::vector<Cell>& oldPath() const { return oldPath_; }
     const std::vector<Cell>& droppedRocks() const { return rocks_; }
-    std::optional<Cell> lastRock() const { return rocks_.empty() ? std::nullopt : std::optional<Cell>(rocks_.back()); }
     std::size_t replans() const { return replans_; }
     std::size_t oldLength() const { return oldLength_; }
     bool replanning() const { return replanning_; }
-    double blockedTime() const { return blockedTime_; }
     void reset();
     void replaceMap(const Grid& grid, Cell start, Cell goal, bool editing);
     void enterEdit();
