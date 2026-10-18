@@ -1,6 +1,6 @@
 # Mars Rover A* Navigation Simulator 2.5D
 
-Etap 8: proceduralny Mars 2.5D, efekty wizualne i dopracowany interfejs; bez audio.
+Etap 9: audio misji, koncowe podsumowanie, pomoc i feedback stanow.
 
 ## Windows / MSYS2 UCRT64
 
@@ -310,3 +310,82 @@ W `src/sandstorm.h` / `StormConfig`:
 | Swiatla | `roverLightOpacity=0.28`, `beaconLightOpacity=0.27` |
 
 Pule i ich limity pozostaja stale. W aktualizacji/rysowaniu burzy nie ma nowych alokacji.
+
+## Audio i final misji
+
+Przy uruchomieniu pojawia sie krotka pomoc. BEGIN otwiera interfejs misji.
+F1 / HELP otwiera pomoc ponownie; F2 / AUDIO otwiera mikser (pauzuje misje).
+M oraz SOUND ON/OFF wlaczaja/wylaczaja dzwiek.
+Mikser ma MASTER VOLUME, MUSIC/AMBIENT i SFX. Ustawienia glosnosci przetrwaja RESET.
+Przy braku urzadzenia audio symulator dziala dalej i pokazuje informacje w mikserze.
+
+### Dzwieki i assety
+
+`src/audio_system.h` / `AudioConfig` zawiera domyslne poziomy:
+MASTER 0.65, AMBIENT 0.32, SFX 0.55, engineGain 0.24, windGain 0.18 i scanInterval 3 s.
+`AudioState` obserwuje stany i pozycje, nie modyfikuje symulacji.
+Sygnaly stanow sa emitowane przy przejsciu, a LIDAR maksymalnie co 3 s aktywnego skanowania.
+Silnik to stale zapetlony stream, wyciszany podczas pauzy/skretu/zatrzymania,
+z glosnoscia zaleznia od rzeczywistego ruchu. Nie restartuje sie na kaflach.
+Wiatr plynnie zmienia glosnosc i pitch z sila, poziomem i podmuchami sandstorm.
+
+Opcjonalne pliki WAV w `assets/audio/` sa ladowane raz przy starcie:
+
+| Plik | Zdarzenie |
+| --- | --- |
+| `ambient_wind.wav` | petla ambientu i burzy |
+| `rover_engine.wav` | petla silnika |
+| `ui_click.wav` | klik interfejsu |
+| `lidar.wav` | ping skanera |
+| `path_found.wav` | znaleziona trasa, takze po replanningu |
+| `route_blocked.wav` | alarm blokady |
+| `recalculating.wav` | sygnal techniczny ponownego planowania |
+| `success.wav` | MISSION_COMPLETE |
+| `error.wav` | NO_ROUTE / NO_PATH / bledne konce |
+
+Brakujace lub nieprawidlowe pliki sa zastepowane generowanymi tonami i szumem PCM.
+Petle sa dekodowane strumieniowo; fallback WAV pozostaje w pamieci do zamkniecia streamu.
+Nie ma pobierania assetow ani ladowania dzwiekow w kazdej klatce.
+Geometria tonow, czestotliwosci i dlugosci: `src/audio_system.cpp`.
+Sciezka assetow: definicja `ROVER_AUDIO_DIR` w `src/CMakeLists.txt`.
+Szczegoly podmiany plikow: `assets/audio/README.md`.
+
+### Zakonczenie i reset
+
+Na ostatnim kaflu rover hamuje plynnie do zera. Nastepnie istniejacy ARRIVAL
+wykonuje zblizenie kamery; silnik cichnie, a beacon od ARRIVAL swieci mocniej.
+Po MISSION_COMPLETE pojawia sie sukces audio i animowany tytul fade/scale.
+Podsumowanie pokazuje PATH LENGTH ostatniej aktywnej trasy, laczna TRAVELLED,
+ITERATIONS wszystkich wyszukiwan, REPLANS, MISSION TIME, MAP SIZE i SEED.
+Czas obejmuje odtwarzanie, bez pauz; slady i dystans pozostaja przez replanning.
+Beacon pulsuje rowniez po zakonczeniu misji.
+
+- NEW MISSION otwiera generator po wyczyszczeniu poprzedniej misji.
+- REPLAY uruchamia od nowa aktualna mape (dodane skaly pozostaja).
+- BACK TO EDIT przechodzi do edycji.
+- NO_ROUTE pokazuje duzy ostrzegawczy komunikat, sygnal bledu i EDIT MAP / RESET / NEW MAP.
+
+RESET/NEW MAP czyszcza audio, statystyki, alerty, slady i czastki, wylaczaja burze
+i resetuja kamere. Nowy ambient zaczyna sie od cichego fade-in, bez starego silnika/sygnalow.
+RESET przywraca pierwotny START; teren pozostaje aktualny. GENERATE odtwarza baze z seedu.
+Nie zmieniono A*, generatora, replanningu, PATH_REVEAL ani logiki kamery.
+
+### Zmienione moduly i testy
+
+- `src/audio_system.*`: zasoby raylib, generatory PCM, petle i model zdarzen audio.
+- `src/mission_feedback.*`: pomoc, mikser, toasty stanow, podsumowanie i NO_ROUTE.
+- `src/main.cpp`: integracja, kontrola wejscia przy modalach i wspolne czyszczenie.
+- `src/rover.cpp`: hamowanie tylko na ostatnim segmencie, bez zmiany trasy.
+- `src/scene_renderer.cpp`, `src/visual_effects.cpp`: silniejszy i zywy beacon finalu.
+- CMake, `assets/audio/README.md` i testy.
+
+`ctest --preset ucrt64` zawiera test audio/feedback bez urzadzenia: normalna misja,
+trzy replanningi na 80x60, NO_ROUTE, PAUSE/STEP, reset, liczniki i poziomy burzy.
+`audio_smoke.exe` sprawdza rzeczywiste urzadzenie, petle WAV, SOUND OFF/ON,
+MASTER, pauze i zatrzymanie wszystkich zasobow przy RESET.
+`visual_smoke.exe` zapisuje tez pomoc, mikser, podsumowanie i NO_ROUTE.
+
+```powershell
+.\build\ucrt64\audio_smoke.exe
+.\build\ucrt64\visual_smoke.exe build/visual-qa
+```

@@ -60,9 +60,20 @@ void Rover::update(double seconds) {
             tilt_=0.045*std::sin(pi*t)*(turnDelta_>0 ? 1 : -1);
             if (t>=1) { turning_=false; tilt_=0; }
         } else {
-            const double dt=std::min(seconds,(1-progress_)/speed_);
-            const double distance=dt*speed_;
-            progress_+=distance; seconds-=dt;
+            double dt=0,distance=0;
+            if(segment_+2==path_.size()) {
+                // Final tile only: continuous deceleration to zero at GOAL.
+                // Closed-form integration preserves motion across different frame rates.
+                const double remaining=std::sqrt(std::max(0.0,1-progress_));
+                dt=std::min(seconds,2*remaining/speed_);
+                const double next=std::max(0.0,remaining-speed_*dt/2);
+                const double progress=1-next*next;
+                distance=progress-progress_;progress_=progress;
+            } else {
+                dt=std::min(seconds,(1-progress_)/speed_);
+                distance=dt*speed_;progress_+=distance;
+            }
+            seconds-=dt;
             wheelAngle_+=distance/0.12;
             auto a=path_[segment_], b=path_[segment_+1];
             x_=a.x+(b.x-a.x)*progress_; y_=a.y+(b.y-a.y)*progress_;

@@ -17,7 +17,7 @@ void VisualEffects::update(float dt,const Simulation& sim,Cell start) {
     const bool moved=distance>0.00001f;
     const bool searching=sim.status()==SimulationStatus::SEARCHING || sim.status()==SimulationStatus::RECALCULATING;
     const bool phaseChanged=previous_!=sim.status();
-    const bool running=sim.playing() || sim.status()==SimulationStatus::READY || sim.status()==SimulationStatus::EDIT_MAP;
+    const bool running=sim.playing() || sim.status()==SimulationStatus::READY || sim.status()==SimulationStatus::EDIT_MAP || sim.status()==SimulationStatus::MISSION_COMPLETE;
     float tick=running?std::clamp(dt,0.0f,0.1f):(moved || (searching && phaseChanged) ? 1.0f/60:0);
     time_+=tick;
     sandstorm_.update(tick);

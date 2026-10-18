@@ -230,7 +230,7 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
             int x=depth-y;Cell cell{x,y};auto p=project(x+0.5f,y+0.5f);
             if(!onScreen(p)) continue;
             if(grid.blocked(cell)) obstacle(cell,tileHash(x,y,terrain.config.seed),detail,storm.haze(p,focus,view.zoom));
-            if(cell==terrain.goal) beacon(terrain.goal,effects.time(),sim.status()==SimulationStatus::MISSION_COMPLETE);
+            if(cell==terrain.goal) beacon(terrain.goal,effects.time(),sim.status()==SimulationStatus::MISSION_COMPLETE || sim.status()==SimulationStatus::ARRIVAL);
         }
         if(!roverDrawn && depth>=roverDepth) {
             if(onScreen(project(static_cast<float>(rover.x()+0.5),static_cast<float>(rover.y()+0.5))))

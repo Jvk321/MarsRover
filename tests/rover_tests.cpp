@@ -32,6 +32,8 @@ int main() {
     rover.update(0.5); rover.update(0.45);
     check(near(std::remainder(rover.heading(),2*pi),-pi/2));
     rover.update(0.5);
+    check(!rover.complete() && near(rover.y(),0.25));
+    rover.update(0.5);
     check(rover.complete() && near(rover.x(),0) && near(rover.y(),0));
     double finalWheel=rover.wheelAngle(); rover.update(100);
     check(near(rover.wheelAngle(),finalWheel) && near(rover.travelled(),4));
@@ -42,8 +44,8 @@ int main() {
     check(near(a.x(),b.x()) && near(a.y(),b.y()) && near(a.heading(),b.heading()));
     for (Cell goal : {Cell{2,1},Cell{0,1},Cell{1,0},Cell{1,2}}) {
         rover.reset({{1,1},goal}); rover.setSpeed(1); rover.update(0.1);
-        check(near(rover.x(),1+(goal.x-1)*0.1));
-        check(near(rover.y(),1+(goal.y-1)*0.1));
+        check(near(rover.x(),1+(goal.x-1)*0.0975));
+        check(near(rover.y(),1+(goal.y-1)*0.0975));
     }
     rover.reset(); check(!rover.available() && near(rover.wheelAngle(),0));
     std::cout << "Rover tests passed\n";

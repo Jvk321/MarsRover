@@ -1,4 +1,5 @@
 #include "scene_renderer.h"
+#include "mission_feedback.h"
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -11,10 +12,12 @@ int main(int argc,char** argv) {
     Terrain terrain({80,60,18,47});Simulation sim(terrain.grid,terrain.start,terrain.goal);
     sim.setSpeed(60);sim.setDrivingSpeed(5);
     VisualEffects effects;effects.reset(47);SceneRenderer renderer;
+    MissionFeedback feedback;feedback.helpOpen=false;AudioSystem audio;audio.init("assets/audio");audio.settings.enabled=false;
     Rectangle viewport{0,0,1280,800};WorldCamera camera(80,60,viewport);
     auto target=LoadRenderTexture(1280,800);
     auto frame=[&]() {
         sim.update(1.0/30);effects.update(1.0f/30,sim,terrain.start);
+        feedback.update(1.0f/30,sim);
         CameraPhase phase=CameraPhase::WIDE;
         if(sim.status()==SimulationStatus::DRIVING) phase=CameraPhase::FOLLOW;
         if(sim.status()==SimulationStatus::PATH_REVEAL) phase=CameraPhase::REVEAL;
@@ -27,6 +30,7 @@ int main(int argc,char** argv) {
     auto capture=[&](const char* name) {
         BeginTextureMode(target);ClearBackground(BLACK);
         renderer.draw(terrain,sim,camera,effects,viewport,std::nullopt);
+        feedback.draw(viewport,terrain,sim,audio);
         DrawText(name,20,20,22,RAYWHITE);EndTextureMode();
         Image capture=LoadImageFromTexture(target.texture);ImageFlipVertical(&capture);
         ExportImage(capture,(output/(std::string(name)+".png")).string().c_str());UnloadImage(capture);
@@ -58,5 +62,16 @@ int main(int argc,char** argv) {
     wait(SimulationStatus::RECALCULATING);effects.update(1.0f/30,sim,terrain.start);capture("07-recalculating");
     wait(SimulationStatus::PATH_REVEAL);wait(SimulationStatus::DRIVING);
     wait(SimulationStatus::MISSION_COMPLETE);capture("08-mission-complete");
-    UnloadRenderTexture(target);CloseWindow();std::cout << "Visual smoke passed\n";
+    for(int i=0;i<30;++i) feedback.update(1.0f/30,sim);
+    capture("08a-mission-summary");
+    feedback.helpOpen=true;capture("09-help");feedback.helpOpen=false;
+    feedback.audioOpen=true;capture("10-audio");feedback.audioOpen=false;
+    terrain=Terrain({18,3,0,47});
+    for(int x=0;x<18;++x) {terrain.grid.setBlocked({x,0});terrain.grid.setBlocked({x,2});}
+    terrain.start={0,1};terrain.goal={17,1};sim.replaceMap(terrain.grid,terrain.start,terrain.goal,false);
+    effects.reset(47);feedback.reset();camera=WorldCamera(18,3,viewport);sim.play();
+    wait(SimulationStatus::DRIVING);auto blocked=sim.dropRock(0);if(!blocked) throw std::runtime_error("No-route DROP failed");
+    terrain.edit(*blocked,EditTool::ADD_ROCK);
+    wait(SimulationStatus::NO_ROUTE);capture("11-no-alternative");
+    audio.shutdown();UnloadRenderTexture(target);CloseWindow();std::cout << "Visual smoke passed\n";
 }

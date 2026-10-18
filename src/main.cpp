@@ -3,6 +3,7 @@
 #include "visual_config.h"
 #include "world_camera.h"
 #include "terrain_panel.h"
+#include "mission_feedback.h"
 #include "raylib.h"
 #include "rlgl.h"
 #include <algorithm>
@@ -12,6 +13,7 @@
 
 namespace {
 bool uiBlocked=false;
+AudioSystem* uiAudio=nullptr;
 Color statusColor(SimulationStatus s) {
     switch(s) {
     case SimulationStatus::SEARCHING: return SKYBLUE;
@@ -46,7 +48,9 @@ bool button(Rectangle rect, const char* label, bool enabled = true) {
     DrawRectangleRounded(rect,0.12f,4,!enabled ? Color{23,31,40,220} : hover ? Color{35,71,83,245} : Color{24,43,56,235});
     DrawRectangleRoundedLines(rect,0.12f,4,Fade(VisualConfig::cyan,enabled?(hover?0.8f:0.3f):0.12f));
     DrawText(label, static_cast<int>(rect.x + 10), static_cast<int>(rect.y + (rect.height-17)/2), 17, enabled ? Color{213,230,233,255} : Color{77,99,110,255});
-    return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    bool pressed=hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    if(pressed && uiAudio) uiAudio->click();
+    return pressed;
 }
 }
 int main(int argc,char** argv) {
@@ -74,9 +78,12 @@ int main(int argc,char** argv) {
     if (!IsWindowReady()) return 1;
     SetWindowMinSize(1000, 940);
     SetTargetFPS(60);
+    AudioSystem audio;audio.init(ROVER_AUDIO_DIR);audio.settings.enabled=!snapshot;uiAudio=&audio;
+    MissionFeedback feedback;
     WorldCamera worldCamera(grid.width(),grid.height(),{300,140,980,790});
     SceneRenderer scene;
     VisualEffects effects; effects.reset(terrain.config.seed);
+    auto resetFeedback=[&](){audio.reset();feedback.reset();effects.setStorm(false);};
     std::size_t cameraPathSize = 0;
     while (!WindowShouldClose()) {
         const Rectangle viewport{300,140,static_cast<float>(GetScreenWidth()-300),static_cast<float>(GetScreenHeight()-170)};
@@ -88,8 +95,12 @@ int main(int argc,char** argv) {
             worldCamera.setAuto(autoCamera);
             obstacleCount=terrain.obstacleCount(); cameraPathSize=0; lastPaint.reset();
             rockRandom.seed(terrain.config.seed); effects.reset(terrain.config.seed);
+            resetFeedback();
         }
-        uiBlocked=terrainPanel.open;
+        if(IsKeyPressed(KEY_F1) && !terrainPanel.open) { feedback.helpOpen=!feedback.helpOpen;feedback.audioOpen=false;simulation.pause(); }
+        if(IsKeyPressed(KEY_F2) && !terrainPanel.open) { feedback.audioOpen=!feedback.audioOpen;feedback.helpOpen=false;simulation.pause(); }
+        if(IsKeyPressed(KEY_M)) audio.settings.enabled=!audio.settings.enabled;
+        uiBlocked=terrainPanel.open || feedback.blocksInput();
         BeginDrawing();
         ClearBackground({10,16,24,255});
         DrawRectangleGradientV(0,0,300,GetScreenHeight(),Color{13,25,36,248},Color{13,18,28,248});
@@ -105,6 +116,8 @@ int main(int argc,char** argv) {
         DrawText("TELEMETRY",20,408,10,VisualConfig::cyan);
         DrawText("ROVER / DRIVE CONTROL",20,568,10,VisualConfig::cyan);
         DrawText("MAP / TERRAIN",320,2,10,VisualConfig::cyan);
+        DrawText("CAMERA",20,870,8,VisualConfig::cyan);
+        DrawText("EFFECTS / AUDIO",480,80,8,VisualConfig::cyan);
         // Process controls before the playback tick: PAUSE/RESET take effect immediately.
         bool play = button({20,65,120,42},"PLAY",simulation.active());
         bool pause = button({152,65,120,42},"PAUSE",simulation.playing());
@@ -114,7 +127,7 @@ int main(int argc,char** argv) {
         pause = pause || (!uiBlocked && IsKeyPressed(KEY_SPACE) && simulation.playing());
         step = step || (!uiBlocked && IsKeyPressed(KEY_N));
         reset = reset || (!uiBlocked && IsKeyPressed(KEY_R));
-        if (reset) { simulation.reset(); effects.reset(terrain.config.seed); }
+        if (reset) { simulation.reset(); effects.reset(terrain.config.seed); resetFeedback(); }
         else if (step) simulation.step();
         else if (pause) simulation.pause();
         else if (play) simulation.play();
@@ -140,6 +153,7 @@ int main(int argc,char** argv) {
         simulation.setDrivingSpeed(drivingSpeed);
         simulation.update(GetFrameTime());
         DrawRectangle(11,268,3,44,statusColor(simulation.status()));
+        if(feedback.flash()>0) DrawRectangleRounded({16,268,270,46},0.05f,4,Fade(statusColor(simulation.status()),feedback.flash()*0.16f));
         DrawText(statusName(simulation.status()),22,273,18,statusColor(simulation.status()));
         DrawText(simulation.playing() ? "LIVE  /  PLAYING" : "STANDBY  /  PAUSED",22,298,12,Color{124,151,166,255});
         if (search.current()) {
@@ -169,11 +183,13 @@ int main(int argc,char** argv) {
         DrawText(search.path().empty() || simulation.status()==SimulationStatus::ROUTE_BLOCKED ? "NEW PATH: -" : TextFormat("NEW PATH: %d",static_cast<int>(simulation.pathLength())),20,840,18,GOLD);
         if (button({20,880,252,38},worldCamera.automatic() ? "AUTO CAMERA: ON" : "AUTO CAMERA: OFF"))
             worldCamera.setAuto(!worldCamera.automatic());
-        if (button({320,18,130,36},"NEW MAP")) { terrainPanel.open=true; simulation.pause(); }
+        if (button({320,18,130,36},"NEW MAP")) {
+            simulation.reset();effects.reset(terrain.config.seed);resetFeedback();worldCamera.reset();cameraPathSize=0;terrainPanel.open=true;
+        }
         if (button({460,18,130,36},"GENERATE")) { pendingTerrain=terrain.config; simulation.pause(); }
-        if (button({600,18,130,36},"EDIT MAP")) { simulation.enterEdit(); effects.reset(terrain.config.seed); cameraPathSize=0; }
+        if (button({600,18,130,36},"EDIT MAP")) { simulation.enterEdit(); effects.reset(terrain.config.seed); resetFeedback(); cameraPathSize=0; }
         if (button({740,18,145,36},"CLEAR PATH")) {
-            simulation.replaceMap(grid,start,goal,simulation.status()==SimulationStatus::EDIT_MAP); effects.reset(terrain.config.seed); cameraPathSize=0;
+            simulation.replaceMap(grid,start,goal,simulation.status()==SimulationStatus::EDIT_MAP); effects.reset(terrain.config.seed); resetFeedback(); cameraPathSize=0;
         }
         DrawText(TextFormat("MAP: %d x %d   OBSTACLES: %d / %.1f%%   SEED: %u",grid.width(),grid.height(),obstacleCount,
                             100.0*obstacleCount/(grid.width()*grid.height()),terrain.config.seed),320,59,17,LIGHTGRAY);
@@ -185,6 +201,7 @@ int main(int argc,char** argv) {
                 if (button(rect,tools[i])) editTool=static_cast<EditTool>(i);
                 if (editTool==static_cast<EditTool>(i)) DrawRectangleLinesEx(rect,2,GOLD);
             }
+            if(button({890,90,90,34},"AUDIO")) {feedback.audioOpen=true;simulation.pause();}
         } else {
             if (button({320,90,145,34},"DROP ROCK",simulation.canDropRock())) {
                 if (auto rock=simulation.dropRock(rockRandom())) {
@@ -193,8 +210,10 @@ int main(int argc,char** argv) {
                     cameraPathSize=0;
                 }
             }
-            DrawText("DYNAMIC ROUTE CONTROL",480,101,14,Color{124,151,166,255});
+            if(button({480,90,130,34},"AUDIO")) {feedback.audioOpen=true;simulation.pause();}
+            if(button({620,90,160,34},audio.settings.enabled?"SOUND: ON":"SOUND: OFF")) audio.settings.enabled=!audio.settings.enabled;
         }
+        if(button({900,18,80,36},"HELP")) {feedback.helpOpen=true;simulation.pause();}
         worldCamera.resize(viewport);
         if (reset) { worldCamera.reset(); cameraPathSize = 0; }
         if (search.path().size()!=cameraPathSize) {
@@ -211,7 +230,7 @@ int main(int argc,char** argv) {
         if (simulation.status()==SimulationStatus::ARRIVAL) phase=CameraPhase::ARRIVAL;
         if (simulation.status()==SimulationStatus::MISSION_COMPLETE) phase=CameraPhase::COMPLETE;
         CameraInput cameraInput;
-        cameraInput.worldHovered=!terrainPanel.open && CheckCollisionPointRec(GetMousePosition(),viewport);
+        cameraInput.worldHovered=!terrainPanel.open && !feedback.blocksInput() && CheckCollisionPointRec(GetMousePosition(),viewport);
         cameraInput.wheel=GetMouseWheelMove();
         if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) cameraInput.drag=GetMouseDelta();
         cameraInput.keys={static_cast<float>(IsKeyDown(KEY_D)-IsKeyDown(KEY_A)),
@@ -221,7 +240,7 @@ int main(int argc,char** argv) {
         const auto hovered=worldCamera.pick(GetMousePosition(),grid.width(),grid.height());
         if (!hovered) lastPaint.reset();
         if (!IsMouseButtonDown(MOUSE_BUTTON_RIGHT) && !IsMouseButtonDown(MOUSE_BUTTON_LEFT)) lastPaint.reset();
-        if (editing && !terrainPanel.open && hovered && !IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+        if (editing && !terrainPanel.open && !feedback.blocksInput() && hovered && !IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
             bool changed=false;
             if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
                 rightPaintValue=!grid.blocked(*hovered);
@@ -240,10 +259,12 @@ int main(int argc,char** argv) {
                 }
             }
             if (changed) {
-                simulation.replaceMap(grid,start,goal,true); effects.reset(terrain.config.seed); cameraPathSize=0; obstacleCount=terrain.obstacleCount();
+                simulation.replaceMap(grid,start,goal,true); effects.reset(terrain.config.seed); resetFeedback(); cameraPathSize=0; obstacleCount=terrain.obstacleCount();
             }
         }
         effects.update(GetFrameTime(),simulation,start);
+        feedback.update(GetFrameTime(),simulation);
+        audio.update(GetFrameTime(),simulation,effects.sandstorm());
         scene.draw(terrain,simulation,worldCamera,effects,viewport,
                    editing && !terrainPanel.open ? hovered : std::nullopt);
         DrawText(editing ? "LMB: tool  /  RMB: paint" : "WASD / MMB: pan   WHEEL: zoom",320,GetScreenHeight()-22,15,Color{150,175,186,255});
@@ -257,7 +278,16 @@ int main(int argc,char** argv) {
             DrawRectangle(320,150,GetScreenWidth()-340,44,{45,26,27,235});
             DrawText(simulation.status()==SimulationStatus::NO_ROUTE ? "NO ALTERNATIVE ROUTE" : "ROUTE BLOCKED",340,160,24,ORANGE);
         }
+        if(terrainPanel.open && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) audio.click();
         if (auto config=terrainPanel.draw()) pendingTerrain=*config;
+        auto feedbackAction=feedback.draw(viewport,terrain,simulation,audio);
+        if(feedbackAction!=FeedbackAction::NONE) {
+            resetFeedback();effects.reset(terrain.config.seed);cameraPathSize=0;worldCamera.reset();lastPaint.reset();
+            if(feedbackAction==FeedbackAction::NEW_MISSION) {simulation.reset();terrainPanel.open=true;}
+            if(feedbackAction==FeedbackAction::REPLAY) {simulation.reset();simulation.play();}
+            if(feedbackAction==FeedbackAction::RESET) simulation.reset();
+            if(feedbackAction==FeedbackAction::EDIT) simulation.enterEdit();
+        }
         if(snapshot && ++snapshotFrames==8) {
             rlDrawRenderBatchActive();
             Image screenshot=LoadImageFromScreen();ExportImage(screenshot,argv[2]);UnloadImage(screenshot);
@@ -265,5 +295,5 @@ int main(int argc,char** argv) {
         }
         EndDrawing();
     }
-    CloseWindow();
+    uiAudio=nullptr;audio.shutdown();CloseWindow();
 }
