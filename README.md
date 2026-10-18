@@ -1,6 +1,6 @@
 # Mars Rover A* Navigation Simulator 2.5D
 
-Etap 7: dynamiczne blokowanie trasy i ponowne planowanie A* podczas jazdy.
+Etap 8: proceduralny Mars 2.5D, efekty wizualne i dopracowany interfejs; bez audio.
 
 ## Windows / MSYS2 UCRT64
 
@@ -41,6 +41,11 @@ Zamknij okno lub nacisnij Escape, aby zakonczyc.
 - `tests/camera_tests.cpp`: mapy 20x20 i 48x35, zoom, przesuwanie, sledzenie, pauza, reset i zblizenie po przyjezdzie.
 - `tests/terrain_tests.cpp`: wszystkie presety, seed, przejezdnosc, optymalna trasa A*, edycja i klikniecia po zoomie/przesunieciu.
 - `tests/replanning_tests.cpp`: hamowanie, trzy kolejne blokady na mapie 80x60, nowe A*, kontynuacja, NO_ROUTE, PAUSE/STEP i RESET.
+- `src/scene_renderer.*`: proceduralny teren, obiekty z wysokoscia, projekcje tras, beacon, paralaksa, culling i kolejnosc glebi.
+- `src/visual_effects.*`: odseparowany zegar i dane efektow: slady, kurz, skany; nie modyfikuje symulacji.
+- `src/visual_config.h`: wspolne parametry wygladu, limity i predkosci efektow.
+- `tests/visual_tests.cpp`: deterministyczny wyglad, pauza, limity i czyszczenie efektow.
+- `tests/visual_smoke.cpp`: scenariusz GPU zapisujacy obrazy osmiu faz na mapie 80x60.
 
 Zachowano ruch gora/dol/lewo/prawo, koszt 1, heurystyke euklidesowa,
 listy otwarta/zamknieta oraz wybor ostatniego elementu przy remisie f.
@@ -184,4 +189,59 @@ AUTO CAMERA przez chwile spoglada w kierunku glazu, potem wraca do rovera
 i obserwuje przeliczanie, zachowujac wygladzanie. Sterowanie reczne i pauza
 pozostaja dostepne. RESET kasuje przebieg i telemetrie, wraca do pierwotnego
 START i kadruje mape; dodane przeszkody pozostaja w terenie. GENERATE odtwarza
-mape bazowa z seedu. Nie ma dodatkowego algorytmu planowania ani efektow czasteczkowych.
+mape bazowa z seedu. Nie ma dodatkowego algorytmu planowania.
+
+## Visual polish
+
+Scena jest rysowana proceduralnie, bez platnych ani pobieranych assetow:
+
+- Regolit z lagodnymi plamami koloru, kamykami i peknieciami. Warianty zaleza od wspolrzednych i seedu; sa stale miedzy klatkami.
+- Glazy, grupy skal, male klify i kratery z jasna gora, ciemnymi bokami i cieniem w stalym kierunku.
+- Jasny szesciokolowy rover z panelem slonecznym, zawieszeniem, masztem kamery, obracajaca sie antena i swiatlami.
+- Dwa ciemne slady kol oraz kurz powstajacy za pojazdem, szczegolnie przy ruszaniu i skretach.
+- Cyjanowe elipsy LIDAR co 3 s podczas SEARCHING/RECALCULATING, mocniejsze przy rozpoczeciu fazy. Przed jazda skan wychodzi od rovera zaparkowanego na START.
+- Beacon GOAL z antena, swiatlem, hologramem i pierscieniami; mocniejszy po ukonczeniu misji.
+- Zlota projekcja trasy z poswiata i przeplywajacym swiatlem; widoczna jest tylko odkryta czesc. Stara trasa pozostaje przygaszona.
+- OPEN/CLOSED jako przezroczyste niebieskie/fioletowe nakladki; CURRENT z pulsujaca obwodka.
+- Ciemne niebo, dwie warstwy gor z paralaksa i daleka antena badawcza.
+- Subtelny wiatr i drobiny pylu; SANDSTORM w prawym dolnym rogu zwieksza ich ilosc i dodaje przesuwajaca sie kurtyne piasku oraz zamglenie horyzontu.
+- Nieruchome ciemne panele z cyjanowymi obramowaniami i kolorami stanow.
+
+PAUSE zamraza zegar efektow i czasteczki. RESET, CLEAR PATH, nowa mapa oraz edycja
+czyszcza slady i czasteczki; replanning zachowuje slady przejazdu.
+Efekty nie zmieniaja mapy logicznej, A*, generatora, czasow jazdy ani replanningu.
+LIDAR jest wylacznie wizualizacja, nie zmienia wiedzy algorytmu o mapie.
+
+### Parametry
+
+| Miejsce | Parametry |
+| --- | --- |
+| `src/visual_config.h` | paleta, gridAlpha, openAlpha/closedAlpha, rockHeight/shadowAlpha, prog LOD, paralaksa |
+| `src/visual_config.h` | maxDust=384, maxTracks=16000, trackSpacing=0.10 pola, trackHalfWidth=0.29 |
+| `src/visual_config.h` | dustLife=1.8 s, dustRate=32/s, turnDustRate=48/s, windX/windY |
+| `src/visual_config.h` | scanInterval=3 s, scanLife=2.4 s, scanRadius=145 jednostek swiata |
+| `src/visual_config.h` | ambientCount=72, stormCount=220, stormOpacity=0.16, antennaSpeed, beaconSignalSpeed |
+| `src/scene_renderer.cpp` | ksztalty terenu, skal, kraterow, beaconu, detal gruntu i grubosci projekcji |
+| `src/rover_renderer.cpp` | geometria korpusu, kol, masztu i swiatel |
+| `src/main.cpp`, `src/terrain_panel.cpp` | kolory i geometria paneli/przyciskow |
+
+Po osiagnieciu limitu sladow usuwane sa najstarsze. Emisja kurzu i liczba skanow
+sa ograniczone (maks. 4 aktywne pulsy); wiatr ma stala liczbe drobin.
+Rysowanie detali i obiektow poza widokiem kamery jest pomijane; przy oddaleniu
+wylaczane sa drobne detale gruntu i czesc dodatkowych skalek.
+Maski A* sa przygotowywane raz na klatke w O(liczby pol + liczby wezlow),
+bez przeszukiwania list dla kazdego kafla. Kolejnosc obiektow wynika z x+y.
+Proceduralne funkcje `ground`, `obstacle`, `beacon` i `drawRover` mozna pozniej
+zastapic rysowaniem PNG/sprite'ow bez zmieniania generatora, logiki lub modelu efektow.
+
+### Weryfikacja graficzna
+
+```powershell
+.\build\ucrt64\visual_smoke.exe build/visual-qa
+.\build\ucrt64\src\mars_rover.exe --snapshot build/visual-qa/09-interface.png
+```
+
+Pierwszy program uruchamia ukryte okno OpenGL i zapisuje SEARCHING, PATH_REVEAL,
+DRIVING, SANDSTORM, kamere manualna, ROUTE_BLOCKED, RECALCULATING i MISSION_COMPLETE.
+Drugi zapisuje rzeczywisty panel aplikacji i zamyka okno. Katalog wyjsciowy musi istniec
+(tworzy go `visual_smoke`). Testy GPU sa osobne od `ctest`, ktory sprawdza logike i dane efektow.

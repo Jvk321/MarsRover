@@ -1,10 +1,12 @@
 #include "terrain_panel.h"
 #include "raylib.h"
+#include "visual_config.h"
 #include <limits>
 namespace {
 bool action(Rectangle rect,const char* label) {
     bool hover=CheckCollisionPointRec(GetMousePosition(),rect);
-    DrawRectangleRec(rect,hover ? Color{83,84,106,255}:Color{55,57,74,255});
+    DrawRectangleRounded(rect,0.1f,4,hover ? Color{39,71,83,255}:Color{24,43,56,255});
+    DrawRectangleRoundedLines(rect,0.1f,4,Fade(VisualConfig::cyan,hover?0.8f:0.3f));
     DrawText(label,static_cast<int>(rect.x+8),static_cast<int>(rect.y+10),18,RAYWHITE);
     return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
@@ -15,7 +17,8 @@ std::optional<TerrainConfig> TerrainPanel::draw() {
     if (!open) return std::nullopt;
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),{0,0,0,180});
     const float left=(GetScreenWidth()-580)/2.0f,top=150;
-    DrawRectangle(static_cast<int>(left),static_cast<int>(top),580,580,{32,33,43,255});
+    DrawRectangleRounded({left,top,580,580},0.04f,6,Color{15,27,39,250});
+    DrawRectangleRoundedLines({left,top,580,580},0.04f,6,Fade(VisualConfig::cyan,0.7f));
     DrawText("NEW MARS TERRAIN",static_cast<int>(left+24),174,26,RAYWHITE);
     const char* names[]{"LAB 20x20","MEDIUM 30x30","EXPEDITION 50x50","LARGE 80x60"};
     const int widths[]{20,30,50,80},heights[]{20,30,50,60};

@@ -1,14 +1,28 @@
 #include "simulation.h"
-#include "rover_renderer.h"
+#include "scene_renderer.h"
+#include "visual_config.h"
 #include "world_camera.h"
 #include "terrain_panel.h"
 #include "raylib.h"
+#include "rlgl.h"
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <string>
 
 namespace {
 bool uiBlocked=false;
+Color statusColor(SimulationStatus s) {
+    switch(s) {
+    case SimulationStatus::SEARCHING: return SKYBLUE;
+    case SimulationStatus::RECALCULATING: return Color{184,142,255,255};
+    case SimulationStatus::PATH_REVEAL: case SimulationStatus::PATH_READY: return VisualConfig::gold;
+    case SimulationStatus::DRIVING: return VisualConfig::cyan;
+    case SimulationStatus::MISSION_COMPLETE: return Color{127,227,167,255};
+    case SimulationStatus::ROUTE_BLOCKED: case SimulationStatus::NO_ROUTE: case SimulationStatus::NO_PATH: return Color{255,125,88,255};
+    default: return Color{157,178,190,255};
+    }
+}
 const char* statusName(SimulationStatus status) {
     switch (status) {
     case SimulationStatus::EDIT_MAP: return "EDIT_MAP";
@@ -29,12 +43,15 @@ const char* statusName(SimulationStatus status) {
 }
 bool button(Rectangle rect, const char* label, bool enabled = true) {
     bool hover = enabled && !uiBlocked && CheckCollisionPointRec(GetMousePosition(), rect);
-    DrawRectangleRec(rect, !enabled ? Color{40,40,45,255} : hover ? Color{85,85,105,255} : Color{58,58,73,255});
-    DrawText(label, static_cast<int>(rect.x + 10), static_cast<int>(rect.y + 11), 18, enabled ? RAYWHITE : GRAY);
+    DrawRectangleRounded(rect,0.12f,4,!enabled ? Color{23,31,40,220} : hover ? Color{35,71,83,245} : Color{24,43,56,235});
+    DrawRectangleRoundedLines(rect,0.12f,4,Fade(VisualConfig::cyan,enabled?(hover?0.8f:0.3f):0.12f));
+    DrawText(label, static_cast<int>(rect.x + 10), static_cast<int>(rect.y + (rect.height-17)/2), 17, enabled ? Color{213,230,233,255} : Color{77,99,110,255});
     return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 }
-int main() {
+int main(int argc,char** argv) {
+    const bool snapshot=argc==3 && std::string(argv[1])=="--snapshot";
+    int snapshotFrames=0;
     Terrain terrain(TerrainConfig{});
     const auto& grid=terrain.grid;
     const auto& start=terrain.start;
@@ -52,12 +69,14 @@ int main() {
     float speed = 8.0f;
     float drivingSpeed = 1.5f;
 
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | (snapshot ? FLAG_WINDOW_HIDDEN : 0));
     InitWindow(1280, 960, "Mars Rover A* Navigation Simulator 2.5D");
     if (!IsWindowReady()) return 1;
     SetWindowMinSize(1000, 940);
     SetTargetFPS(60);
     WorldCamera worldCamera(grid.width(),grid.height(),{300,140,980,790});
+    SceneRenderer scene;
+    VisualEffects effects; effects.reset(terrain.config.seed);
     std::size_t cameraPathSize = 0;
     while (!WindowShouldClose()) {
         const Rectangle viewport{300,140,static_cast<float>(GetScreenWidth()-300),static_cast<float>(GetScreenHeight()-170)};
@@ -68,13 +87,24 @@ int main() {
             worldCamera=WorldCamera(grid.width(),grid.height(),viewport);
             worldCamera.setAuto(autoCamera);
             obstacleCount=terrain.obstacleCount(); cameraPathSize=0; lastPaint.reset();
-            rockRandom.seed(terrain.config.seed);
+            rockRandom.seed(terrain.config.seed); effects.reset(terrain.config.seed);
         }
         uiBlocked=terrainPanel.open;
         BeginDrawing();
-        ClearBackground({28,24,25,255});
-        DrawRectangle(0,0,300,GetScreenHeight(),{32,31,40,255});
-        DrawText("A* NAVIGATION",20,20,24,RAYWHITE);
+        ClearBackground({10,16,24,255});
+        DrawRectangleGradientV(0,0,300,GetScreenHeight(),Color{13,25,36,248},Color{13,18,28,248});
+        DrawLine(299,0,299,GetScreenHeight(),Fade(VisualConfig::cyan,0.35f));
+        for(Rectangle group : {Rectangle{10,51,280,194},Rectangle{10,266,280,139},Rectangle{10,420,280,145},Rectangle{10,580,280,178},Rectangle{10,771,280,99}}) {
+            DrawRectangleRounded(group,0.04f,4,Color{20,32,43,190});
+            DrawRectangleRoundedLines(group,0.04f,4,Fade(VisualConfig::cyan,0.13f));
+        }
+        DrawRectangleRounded({308,0,static_cast<float>(GetScreenWidth()-316),132},0.03f,4,Color{16,28,39,235});
+        DrawRectangleLinesEx({308,0,static_cast<float>(GetScreenWidth()-316),132},1,Fade(VisualConfig::cyan,0.23f));
+        DrawText("ARES / NAVIGATION",20,19,23,VisualConfig::cyan);
+        DrawText("SIMULATION",20,250,10,VisualConfig::cyan);
+        DrawText("TELEMETRY",20,408,10,VisualConfig::cyan);
+        DrawText("ROVER / DRIVE CONTROL",20,568,10,VisualConfig::cyan);
+        DrawText("MAP / TERRAIN",320,2,10,VisualConfig::cyan);
         // Process controls before the playback tick: PAUSE/RESET take effect immediately.
         bool play = button({20,65,120,42},"PLAY",simulation.active());
         bool pause = button({152,65,120,42},"PAUSE",simulation.playing());
@@ -84,7 +114,7 @@ int main() {
         pause = pause || (!uiBlocked && IsKeyPressed(KEY_SPACE) && simulation.playing());
         step = step || (!uiBlocked && IsKeyPressed(KEY_N));
         reset = reset || (!uiBlocked && IsKeyPressed(KEY_R));
-        if (reset) simulation.reset();
+        if (reset) { simulation.reset(); effects.reset(terrain.config.seed); }
         else if (step) simulation.step();
         else if (pause) simulation.pause();
         else if (play) simulation.play();
@@ -109,8 +139,9 @@ int main() {
         DrawCircle(static_cast<int>(driveTrack.x+(drivingSpeed-0.25f)/4.75f*driveTrack.width),638,7,ORANGE);
         simulation.setDrivingSpeed(drivingSpeed);
         simulation.update(GetFrameTime());
-        DrawText(TextFormat("STATUS: %s",statusName(simulation.status())),20,270,17,RAYWHITE);
-        DrawText(simulation.playing() ? "PLAYING" : "PAUSED",20,298,18,LIGHTGRAY);
+        DrawRectangle(11,268,3,44,statusColor(simulation.status()));
+        DrawText(statusName(simulation.status()),22,273,18,statusColor(simulation.status()));
+        DrawText(simulation.playing() ? "LIVE  /  PLAYING" : "STANDBY  /  PAUSED",22,298,12,Color{124,151,166,255});
         if (search.current()) {
             const auto& n = *search.current();
             DrawText(TextFormat("CURRENT x/y: %d / %d",n.cell.x,n.cell.y),20,334,18,RAYWHITE);
@@ -138,11 +169,11 @@ int main() {
         DrawText(search.path().empty() || simulation.status()==SimulationStatus::ROUTE_BLOCKED ? "NEW PATH: -" : TextFormat("NEW PATH: %d",static_cast<int>(simulation.pathLength())),20,840,18,GOLD);
         if (button({20,880,252,38},worldCamera.automatic() ? "AUTO CAMERA: ON" : "AUTO CAMERA: OFF"))
             worldCamera.setAuto(!worldCamera.automatic());
-        if (button({320,12,130,36},"NEW MAP")) { terrainPanel.open=true; simulation.pause(); }
-        if (button({460,12,130,36},"GENERATE")) { pendingTerrain=terrain.config; simulation.pause(); }
-        if (button({600,12,130,36},"EDIT MAP")) { simulation.enterEdit(); cameraPathSize=0; }
-        if (button({740,12,145,36},"CLEAR PATH")) {
-            simulation.replaceMap(grid,start,goal,simulation.status()==SimulationStatus::EDIT_MAP); cameraPathSize=0;
+        if (button({320,18,130,36},"NEW MAP")) { terrainPanel.open=true; simulation.pause(); }
+        if (button({460,18,130,36},"GENERATE")) { pendingTerrain=terrain.config; simulation.pause(); }
+        if (button({600,18,130,36},"EDIT MAP")) { simulation.enterEdit(); effects.reset(terrain.config.seed); cameraPathSize=0; }
+        if (button({740,18,145,36},"CLEAR PATH")) {
+            simulation.replaceMap(grid,start,goal,simulation.status()==SimulationStatus::EDIT_MAP); effects.reset(terrain.config.seed); cameraPathSize=0;
         }
         DrawText(TextFormat("MAP: %d x %d   OBSTACLES: %d / %.1f%%   SEED: %u",grid.width(),grid.height(),obstacleCount,
                             100.0*obstacleCount/(grid.width()*grid.height()),terrain.config.seed),320,59,17,LIGHTGRAY);
@@ -162,7 +193,7 @@ int main() {
                     cameraPathSize=0;
                 }
             }
-            DrawText("OPEN: blue | CLOSED: purple | Gold: active path",480,99,16,LIGHTGRAY);
+            DrawText("DYNAMIC ROUTE CONTROL",480,101,14,Color{124,151,166,255});
         }
         worldCamera.resize(viewport);
         if (reset) { worldCamera.reset(); cameraPathSize = 0; }
@@ -209,84 +240,25 @@ int main() {
                 }
             }
             if (changed) {
-                simulation.replaceMap(grid,start,goal,true); cameraPathSize=0; obstacleCount=terrain.obstacleCount();
+                simulation.replaceMap(grid,start,goal,true); effects.reset(terrain.config.seed); cameraPathSize=0; obstacleCount=terrain.obstacleCount();
             }
         }
-        constexpr float halfW=32,halfH=16;
-        const Vector2 origin{0,0};
-        auto project = [=](int x,int y) {
-            return Vector2{origin.x+(x-y)*halfW,origin.y+(x+y)*halfH};
-        };
-        DrawText(editing ? "LMB: selected tool | RMB drag: toggle/paint | PLAY: run A*" : "Wheel: zoom | MMB / WASD: pan (manual camera)",320,GetScreenHeight()-24,16,LIGHTGRAY);
-        BeginScissorMode(300,140,GetScreenWidth()-300,GetScreenHeight()-170);
-        BeginMode2D(worldCamera.view());
-        // Build renderer-only masks once per frame, keeping large maps responsive.
-        const auto count=static_cast<std::size_t>(grid.width())*grid.height();
-        std::vector<CellState> states(count,CellState::UNVISITED);
-        std::vector<bool> pathMask(count,false);
-        std::vector<bool> oldMask(count,false);
-        auto index=[&](Cell c){ return static_cast<std::size_t>(c.y)*grid.width()+c.x; };
-        const bool blocked=simulation.status()==SimulationStatus::ROUTE_BLOCKED;
-        if (!editing) {
-            for (Cell c:simulation.oldPath()) oldMask[index(c)]=true;
-        }
-        if (!editing && !blocked) {
-            for (const auto& node:search.open()) states[index(node.cell)]=CellState::OPEN;
-            for (const auto& node:search.closed()) states[index(node.cell)]=CellState::CLOSED;
-            if (search.current()) states[index(search.current()->cell)]=CellState::CURRENT;
-            if (!search.path().empty())
-                for (std::size_t i=0;i<=simulation.revealed();++i) pathMask[index(search.path()[i])]=true;
-        }
-        for (int y=0;y<grid.height();++y) for (int x=0;x<grid.width();++x) {
-            Cell cell{x,y};
-            Color color = grid.blocked(cell) ? Color{65,49,45,255} : Color{161,94,64,255};
-            if (oldMask[index(cell)] && !grid.blocked(cell)) color=Color{100,86,62,255};
-            CellState state = states[index(cell)];
-            if (state == CellState::OPEN) color = Color{45,115,210,255};
-            if (state == CellState::CLOSED || state == CellState::CURRENT) color = Color{60,32,85,255};
-            if (pathMask[index(cell)]) color = Color{255,218,55,255};
-            if (editing && cell==start) color=Color{60,160,100,255};
-            if (editing && cell==goal) color=Color{80,160,220,255};
-            Vector2 top=project(x,y), right=project(x+1,y), bottom=project(x+1,y+1), left=project(x,y+1);
-            DrawTriangle(top,left,bottom,color); DrawTriangle(top,bottom,right,color);
-            Color edge{55,39,34,255};
-            DrawLineV(top,right,edge); DrawLineV(right,bottom,edge);
-            DrawLineV(bottom,left,edge); DrawLineV(left,top,edge);
-            if (editing && hovered && *hovered==cell && !terrainPanel.open) {
-                DrawLineEx(top,right,2,WHITE); DrawLineEx(right,bottom,2,WHITE);
-                DrawLineEx(bottom,left,2,WHITE); DrawLineEx(left,top,2,WHITE);
-            }
-            if (cell == start || cell == goal) {
-                const char* label = cell == start ? "S" : "G";
-                DrawText(label,static_cast<int>((top.x+bottom.x)/2-4),static_cast<int>((top.y+bottom.y)/2-7),14,RAYWHITE);
-            }
-        }
-        // Dropped boulders: raised dark silhouettes, no particle effects.
-        for (Cell rock:simulation.droppedRocks()) {
-            Vector2 center=WorldCamera::project(rock.x+0.5,rock.y+0.5);
-            Vector2 peak{center.x-3,center.y-18},left{center.x-15,center.y+3},right{center.x+15,center.y+3};
-            DrawTriangle(peak,left,right,Color{43,35,35,255});
-            DrawTriangle(peak,{center.x,center.y+8},right,Color{78,56,48,255});
-            DrawLineEx(peak,left,2,Color{150,100,75,255});
-        }
-        // Draw CURRENT last so adjacent tile edges cannot cover its outline.
-        const bool revealing = simulation.status() == SimulationStatus::PATH_REVEAL;
-        const bool searching = simulation.status() == SimulationStatus::SEARCHING || simulation.status()==SimulationStatus::RECALCULATING;
-        if ((searching && search.current()) || (revealing && simulation.revealed() > 0)) {
-            Cell c = revealing ? search.path()[simulation.revealed()] : search.current()->cell;
-            Vector2 corners[]{project(c.x,c.y),project(c.x+1,c.y),project(c.x+1,c.y+1),project(c.x,c.y+1)};
-            float pulse=static_cast<float>((std::sin(GetTime()*5)+1)/2);
-            Color bright{255,255,static_cast<unsigned char>(180+75*pulse),static_cast<unsigned char>(160+95*pulse)};
-            for (int i=0;i<4;++i) DrawLineEx(corners[i],corners[(i+1)%4],2+2*pulse,bright);
-        }
-        drawRover(simulation.rover(),origin,halfW,halfH);
-        EndMode2D();
-        EndScissorMode();
+        effects.update(GetFrameTime(),simulation,start);
+        scene.draw(terrain,simulation,worldCamera,effects,viewport,
+                   editing && !terrainPanel.open ? hovered : std::nullopt);
+        DrawText(editing ? "LMB: tool  /  RMB: paint" : "WASD / MMB: pan   WHEEL: zoom",320,GetScreenHeight()-22,15,Color{150,175,186,255});
+        if(button({static_cast<float>(GetScreenWidth()-240),static_cast<float>(GetScreenHeight()-28),220,24},
+                  effects.storm() ? "SANDSTORM: ON" : "SANDSTORM: OFF")) effects.setStorm(!effects.storm());
         if (simulation.status()==SimulationStatus::ROUTE_BLOCKED || simulation.status()==SimulationStatus::NO_ROUTE) {
             DrawRectangle(320,150,GetScreenWidth()-340,44,{45,26,27,235});
             DrawText(simulation.status()==SimulationStatus::NO_ROUTE ? "NO ALTERNATIVE ROUTE" : "ROUTE BLOCKED",340,160,24,ORANGE);
         }
         if (auto config=terrainPanel.draw()) pendingTerrain=*config;
+        if(snapshot && ++snapshotFrames==8) {
+            rlDrawRenderBatchActive();
+            Image screenshot=LoadImageFromScreen();ExportImage(screenshot,argv[2]);UnloadImage(screenshot);
+            EndDrawing();break;
+        }
         EndDrawing();
     }
     CloseWindow();
