@@ -1,4 +1,5 @@
 #include "simulation.h"
+#include "rover_renderer.h"
 #include "raylib.h"
 #include <algorithm>
 #include <cmath>
@@ -10,6 +11,8 @@ const char* statusName(SimulationStatus status) {
     case SimulationStatus::SEARCHING: return "SEARCHING";
     case SimulationStatus::PATH_REVEAL: return "REVEALING PATH...";
     case SimulationStatus::PATH_READY: return "PATH_READY";
+    case SimulationStatus::DRIVING: return "DRIVING";
+    case SimulationStatus::MISSION_COMPLETE: return "MISSION COMPLETE";
     case SimulationStatus::NO_PATH: return "NO_PATH";
     case SimulationStatus::INVALID_ENDPOINTS: return "INVALID_ENDPOINTS";
     }
@@ -31,11 +34,12 @@ int main() {
     const auto& search = simulation.search();
 
     float speed = 8.0f;
+    float drivingSpeed = 1.5f;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(1280, 800, "Mars Rover A* Navigation Simulator 2.5D");
+    InitWindow(1280, 920, "Mars Rover A* Navigation Simulator 2.5D");
     if (!IsWindowReady()) return 1;
-    SetWindowMinSize(1000, 700);
+    SetWindowMinSize(1000, 900);
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
         BeginDrawing();
@@ -66,6 +70,15 @@ int main() {
         DrawRectangleRec(track,GRAY);
         DrawCircle(static_cast<int>(track.x + (speed-1)/59*track.width),225,7,SKYBLUE);
         simulation.setSpeed(speed);
+        DrawText(TextFormat("DRIVE: %.2f tiles/s",drivingSpeed),20,590,18,RAYWHITE);
+        if (button({20,620,40,36},"-")) drivingSpeed = std::max(0.25f,drivingSpeed-0.25f);
+        if (button({232,620,40,36},"+")) drivingSpeed = std::min(5.0f,drivingSpeed+0.25f);
+        Rectangle driveTrack{76,633,140,10};
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(),{70,620,152,36}))
+            drivingSpeed = 0.25f + 4.75f*std::clamp((GetMouseX()-driveTrack.x)/driveTrack.width,0.0f,1.0f);
+        DrawRectangleRec(driveTrack,GRAY);
+        DrawCircle(static_cast<int>(driveTrack.x+(drivingSpeed-0.25f)/4.75f*driveTrack.width),638,7,ORANGE);
+        simulation.setDrivingSpeed(drivingSpeed);
         simulation.update(GetFrameTime());
         DrawText(TextFormat("STATUS: %s",statusName(simulation.status())),20,270,17,RAYWHITE);
         DrawText(simulation.playing() ? "PLAYING" : "PAUSED",20,298,18,LIGHTGRAY);
@@ -84,7 +97,14 @@ int main() {
         DrawText(TextFormat("PATH LENGTH: %d",static_cast<int>(simulation.pathLength())),20,520,18,GOLD);
         DrawText(TextFormat("REVEALED: %d / %d",static_cast<int>(simulation.revealed()),
                             static_cast<int>(simulation.pathLength())),20,548,18,GOLD);
-        DrawText("Space: play/pause\nN: step   R: reset\nPath length = segments\nCLOSED includes CURRENT",20,590,16,LIGHTGRAY);
+        const auto& rover = simulation.rover();
+        if (rover.available()) {
+            DrawText(TextFormat("ROVER x/y: %.2f / %.2f",rover.x(),rover.y()),20,680,18,RAYWHITE);
+            const auto segment = std::min(rover.segment()+1,simulation.pathLength());
+            DrawText(TextFormat("SEGMENT: %d / %d",static_cast<int>(segment),static_cast<int>(simulation.pathLength())),20,710,18,RAYWHITE);
+            DrawText(TextFormat("TRAVELLED: %.2f / %d",rover.travelled(),static_cast<int>(simulation.pathLength())),20,740,18,GOLD);
+        } else DrawText("ROVER: waiting for path",20,680,18,LIGHTGRAY);
+        DrawText("Space: play/pause\nN: step (drive: 1/60 s)\nR: reset\nPath length = segments",20,790,16,LIGHTGRAY);
 
         const float sum = static_cast<float>(grid.width()) + grid.height();
         const float availableWidth = GetScreenWidth()-340.0f;
@@ -125,6 +145,7 @@ int main() {
             Color bright{255,255,static_cast<unsigned char>(180+75*pulse),static_cast<unsigned char>(160+95*pulse)};
             for (int i=0;i<4;++i) DrawLineEx(corners[i],corners[(i+1)%4],2+2*pulse,bright);
         }
+        drawRover(simulation.rover(),origin,halfW,halfH);
         EndDrawing();
     }
     CloseWindow();

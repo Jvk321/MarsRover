@@ -1,7 +1,8 @@
 #pragma once
 #include "astar.h"
+#include "rover.h"
 
-enum class SimulationStatus { READY, SEARCHING, PATH_REVEAL, PATH_READY, NO_PATH, INVALID_ENDPOINTS };
+enum class SimulationStatus { READY, SEARCHING, PATH_REVEAL, PATH_READY, DRIVING, MISSION_COMPLETE, NO_PATH, INVALID_ENDPOINTS };
 
 // Playback and reveal state, independent of raylib and A* implementation details.
 class Simulation {
@@ -13,6 +14,8 @@ public:
     void step();
     void update(double deltaSeconds);
     void setSpeed(double stepsPerSecond);
+    void setDrivingSpeed(double speed) { rover_.setSpeed(speed); }
+    const Rover& rover() const { return rover_; }
     bool active() const;
     bool playing() const { return playing_; }
     SimulationStatus status() const { return status_; }
@@ -22,6 +25,7 @@ public:
     bool visible(Cell cell) const;
 private:
     AStarSearch search_;
+    Rover rover_;
     SimulationStatus status_ = SimulationStatus::READY;
     bool playing_ = false;
     double elapsed_ = 0, speed_ = 8;

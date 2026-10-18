@@ -1,6 +1,6 @@
 # Mars Rover A* Navigation Simulator 2.5D
 
-Etap 3: iteracyjny A* i animowane odkrywanie znalezionej trasy. Bez rovera, efektow i dzwieku.
+Etap 4: iteracyjny A*, odkrywanie trasy i jazda rovera 2.5D. Bez efektow srodowiskowych i dzwieku.
 
 ## Windows / MSYS2 UCRT64
 
@@ -29,9 +29,12 @@ Zamknij okno lub nacisnij Escape, aby zakonczyc.
 - `src/astar.h`, `src/astar.cpp`: dynamiczny `Grid(width, height)` i `findPath` bez zaleznosci od raylib.
 - `src/main.cpp`: przykladowa mapa 24x14, przeszkody, start, cel i trasa; rozmiar mozna zmienic w konstruktorze `Grid`.
 - `src/simulation.h`, `src/simulation.cpp`: stan symulacji, odtwarzanie, zegar i odkrywanie trasy; bez raylib.
+- `src/rover.h`, `src/rover.cpp`: ciagla pozycja, obrot, przechyl i animacja kol; bez raylib.
+- `src/rover_renderer.h`, `src/rover_renderer.cpp`: izometryczny model z podstawowych ksztaltow raylib.
 - `legacy/astar_original.cpp`: oryginalny program, zachowany bez zmian i niewlaczony do kompilacji.
 - `tests/astar_tests.cpp`: mapy prostokatne, granice, przeszkody, brak trasy i start rowny celowi.
 - `tests/simulation_tests.cpp`: automatyczne odkrywanie, pauza, STEP, RESET i mapa 33x25.
+- `tests/rover_tests.cpp`: interpolacja, cztery kierunki, skrety i niezaleznosc od kroku czasu.
 
 Zachowano ruch gora/dol/lewo/prawo, koszt 1, heurystyke euklidesowa,
 listy otwarta/zamknieta oraz wybor ostatniego elementu przy remisie f.
@@ -45,7 +48,7 @@ Poniewaz repozytorium nie zawieralo `grid.txt`, demonstracja tworzy mape w pamie
 
 Program zaczyna w stanie READY, z wstrzymanym odtwarzaniem.
 
-- PLAY / PAUSE (Spacja): odtwarzanie lub zatrzymanie eksploracji i odkrywania trasy.
+- PLAY / PAUSE (Spacja): odtwarzanie lub zatrzymanie eksploracji, odkrywania trasy i jazdy.
 - STEP (N): zatrzymuje odtwarzanie i wykonuje jedna iteracje A* lub odslania jeden segment trasy.
 - RESET (R): czysci wyszukiwanie i wraca do READY, zachowujac wybrana predkosc.
 - Suwak oraz przyciski - / +: predkosc 1-60 krokow na sekunde, wspolna dla obu faz.
@@ -59,7 +62,9 @@ do nastepnego pola. Odkryte pola sa jasnozlote, a ostatnie odsloniete pole
 ma pulsujaca ramke. Nieodkryta czesc nie ma oznaczenia trasy; OPEN i CLOSED pozostaja widoczne.
 PLAY kontynuuje automatycznie odkrywanie, PAUSE zamraza postep,
 a STEP odslania dokladnie jeden segment i pozostawia symulacje w pauzie.
-Po dotarciu do GOAL symulacja przechodzi do PATH_READY i zatrzymuje odtwarzanie.
+Po odkryciu GOAL symulacja przechodzi do PATH_READY, a przy odtwarzaniu
+w nastepnej aktualizacji rozpoczyna DRIVING od START. Przy pracy krokowej
+PATH_READY pozostaje w pauzie do PLAY lub STEP.
 NO_PATH oznacza wyczerpanie OPEN,
 a INVALID_ENDPOINTS niepoprawny start lub cel. Aby zaczac ponownie, uzyj RESET.
 Panel pokazuje status wyszukiwania, stan odtwarzania, x/y, g/h/f biezacego pola,
@@ -75,3 +80,21 @@ je do CLOSED i analizuje czterech sasiadow. Pierwszy krok przetwarza start.
 Krok wybierajacy cel rekonstruuje trase i ustawia PATH_FOUND; wywolania
 `step()` po zakonczeniu niczego nie zmieniaja. `reset()` przywraca stan poczatkowy.
 Synchroniczne `findPath()` pozostaje dostepne jako wrapper dla testow i innych klientow.
+
+## Jazda rovera
+
+Rover porusza sie po zapisanej trasie, interpolujac pozycje miedzy srodkami pol.
+Przed zmiana kierunku zatrzymuje sie i obraca plynnie przez 0.45 s.
+Kierunek poczatkowy odpowiada pierwszemu segmentowi. Pomaranczowy przod
+i strzalka wskazuja kierunek w tej samej projekcji izometrycznej co mapa.
+Podczas skretu nadwozie delikatnie sie przechyla, a kola sa nieruchome.
+Kola obracaja sie proporcjonalnie do przebytej drogi, bez animacji podczas pauzy.
+
+Osobny suwak DRIVE i przyciski - / + ustawiaja predkosc 0.25-5 pol/s,
+niezalezna od tempa A* i PATH_REVEAL. Panel pokazuje pozycje x/y,
+numer segmentu (od 1), TRAVELLED (droga w jednostkach pol) i predkosc.
+STEP podczas DRIVING zatrzymuje odtwarzanie i przesuwa czas jazdy o 1/60 s.
+PAUSE zamraza pozycje, obrot, kola i przechyl. RESET usuwa rover i trase,
+wracajac do READY; obie wybrane predkosci pozostaja zachowane.
+Po dotarciu do GOAL stan zmienia sie na MISSION_COMPLETE i odtwarzanie sie zatrzymuje.
+START = GOAL konczy misje bez ruchu. Kamera pozostaje statyczna.

@@ -4,7 +4,8 @@
 
 bool Simulation::active() const {
     return status_ == SimulationStatus::READY || status_ == SimulationStatus::SEARCHING ||
-           status_ == SimulationStatus::PATH_REVEAL;
+           status_ == SimulationStatus::PATH_REVEAL || status_ == SimulationStatus::PATH_READY ||
+           status_ == SimulationStatus::DRIVING;
 }
 void Simulation::syncSearch() {
     switch (search_.status()) {
@@ -18,7 +19,7 @@ void Simulation::syncSearch() {
     }
 }
 void Simulation::reset() {
-    search_.reset(); revealed_ = 0; playing_ = false; elapsed_ = 0; syncSearch();
+    search_.reset(); rover_.reset(); revealed_ = 0; playing_ = false; elapsed_ = 0; syncSearch();
 }
 void Simulation::play() { if (active()) { playing_ = true; elapsed_ = 0; } }
 void Simulation::pause() { playing_ = false; elapsed_ = 0; }
@@ -27,6 +28,17 @@ void Simulation::setSpeed(double speed) {
 }
 void Simulation::advance() {
     if (!active()) return;
+    if (status_ == SimulationStatus::PATH_READY) {
+        rover_.reset(search_.path());
+        status_ = rover_.complete() ? SimulationStatus::MISSION_COMPLETE : SimulationStatus::DRIVING;
+        if (!active()) pause();
+        return;
+    }
+    if (status_ == SimulationStatus::DRIVING) {
+        rover_.update(1.0/60);
+        if (rover_.complete()) { status_ = SimulationStatus::MISSION_COMPLETE; pause(); }
+        return;
+    }
     if (status_ == SimulationStatus::PATH_REVEAL) {
         ++revealed_;
         if (revealed_ == pathLength()) status_ = SimulationStatus::PATH_READY;
@@ -39,12 +51,19 @@ void Simulation::advance() {
 void Simulation::step() { pause(); advance(); }
 void Simulation::update(double delta) {
     if (!playing_ || !active() || !std::isfinite(delta) || delta <= 0) return;
+    if (status_ == SimulationStatus::PATH_READY) { advance(); return; }
+    if (status_ == SimulationStatus::DRIVING) {
+        rover_.update(delta);
+        if (rover_.complete()) { status_ = SimulationStatus::MISSION_COMPLETE; pause(); }
+        return;
+    }
     elapsed_ += delta;
     const double interval = 1.0 / speed_;
     while (playing_ && active() && elapsed_ >= interval) {
         elapsed_ -= interval;
         auto previous = status_;
         advance();
+        if (status_ == SimulationStatus::PATH_READY) { elapsed_ = 0; break; }
         // Give the first reveal segment a full interval after reaching the goal.
         if (previous != SimulationStatus::PATH_REVEAL && status_ == SimulationStatus::PATH_REVEAL) {
             elapsed_ = 0;
@@ -53,7 +72,8 @@ void Simulation::update(double delta) {
     }
 }
 bool Simulation::visible(Cell cell) const {
-    if (status_ != SimulationStatus::PATH_REVEAL && status_ != SimulationStatus::PATH_READY) return false;
+    if (status_ != SimulationStatus::PATH_REVEAL && status_ != SimulationStatus::PATH_READY &&
+        status_ != SimulationStatus::DRIVING && status_ != SimulationStatus::MISSION_COMPLETE) return false;
     const auto& path = search_.path();
     return std::find(path.begin(), path.begin() + revealed_ + 1, cell) != path.begin() + revealed_ + 1;
 }
