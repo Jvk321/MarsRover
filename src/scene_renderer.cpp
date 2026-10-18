@@ -5,6 +5,12 @@
 #include <cmath>
 namespace {
 constexpr float pi=3.14159265358979323846f;
+Color fogged(Color c,float amount) {
+    const Color fog=StormConfig::hazeColor;
+    return {static_cast<unsigned char>(c.r+(fog.r-c.r)*amount),
+            static_cast<unsigned char>(c.g+(fog.g-c.g)*amount),
+            static_cast<unsigned char>(c.b+(fog.b-c.b)*amount),c.a};
+}
 Vector2 project(float x,float y) { return WorldCamera::project(x,y); }
 void triangle(Vector2 a,Vector2 b,Vector2 c,Color color) {
     if((b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x)>0) std::swap(b,c);
@@ -38,11 +44,11 @@ Color groundColor(Cell cell,std::uint32_t hash,std::uint32_t seed) {
     return {static_cast<unsigned char>(158+value),static_cast<unsigned char>(77+value/2),
             static_cast<unsigned char>(49+value/3),255};
 }
-void ground(Cell c,std::uint32_t h,bool detail,std::uint32_t seed) {
-    diamond(c,0,groundColor(c,h,seed));
+void ground(Cell c,std::uint32_t h,bool detail,std::uint32_t seed,float haze) {
+    diamond(c,0,fogged(groundColor(c,h,seed),haze));
     // Fine sand seams rather than a high-contrast chessboard.
     diamond(c,0,Fade(Color{241,165,101,255},VisualConfig::gridAlpha),true,0.45f);
-    if(!detail) return;
+    if(!detail || haze>0.4f) return;
     for(int i=0;i<VisualConfig::terrainDetailCount;++i) {
         h=h*1664525u+1013904223u;
         float x=c.x+0.1f+(h%800)/1000.0f;
@@ -59,38 +65,38 @@ void ground(Cell c,std::uint32_t h,bool detail,std::uint32_t seed) {
         }
     }
 }
-void rockShape(Vector2 p,float width,float height,std::uint32_t h) {
-    DrawEllipse(static_cast<int>(p.x+8),static_cast<int>(p.y+6),width*1.15f,width*0.48f,Fade(BLACK,VisualConfig::shadowAlpha));
+void rockShape(Vector2 p,float width,float height,std::uint32_t h,float haze=0) {
+    DrawEllipse(static_cast<int>(p.x+8),static_cast<int>(p.y+6),width*1.15f,width*0.48f,Fade(BLACK,VisualConfig::shadowAlpha*(1-haze)));
     Vector2 base[]{ {p.x-width,p.y}, {p.x-width*0.3f,p.y+width*0.45f},
                     {p.x+width,p.y+width*0.15f}, {p.x+width*0.6f,p.y-width*0.32f},
                     {p.x-width*0.35f,p.y-width*0.4f} };
     Vector2 top[5];
     for(int i=0;i<5;++i) top[i]={p.x+(base[i].x-p.x)*0.76f,p.y+(base[i].y-p.y)*0.76f-height};
     Color sides[]{Color{69,40,34,255},Color{85,47,37,255},Color{100,56,42,255},Color{93,52,41,255},Color{102,58,43,255}};
-    for(int i=0;i<5;++i) quad(base[i],base[(i+1)%5],top[(i+1)%5],top[i],sides[i]);
+    for(int i=0;i<5;++i) quad(base[i],base[(i+1)%5],top[(i+1)%5],top[i],fogged(sides[i],haze));
     Color cap{static_cast<unsigned char>(140+h%25),static_cast<unsigned char>(82+h%14),57,255};
-    for(int i=1;i<4;++i) triangle(top[0],top[i],top[i+1],cap);
+    for(int i=1;i<4;++i) triangle(top[0],top[i],top[i+1],fogged(cap,haze));
     DrawLineEx(top[4],top[0],0.8f,{211,139,91,180});
     DrawLineEx(top[0],top[1],0.8f,{189,113,73,180});
     DrawLineEx(top[1],{top[1].x+4,top[1].y+5},0.6f,{61,36,32,180});
 }
-void obstacle(Cell c,std::uint32_t hash,bool detailed) {
+void obstacle(Cell c,std::uint32_t hash,bool detailed,float haze) {
     Vector2 center=project(c.x+0.5f,c.y+0.5f);
     switch(hash%4) {
-    case 0: rockShape(center,20,VisualConfig::rockHeight+(hash%11),hash);break;
+    case 0: rockShape(center,20,VisualConfig::rockHeight+(hash%11),hash,haze);break;
     case 1:
-        rockShape({center.x-10,center.y-4},12,14,hash);
-        rockShape({center.x+9,center.y},13,18,hash+3);
-        if(detailed) rockShape({center.x-5,center.y+7},9,9,hash+7);
+        rockShape({center.x-10,center.y-4},12,14,hash,haze);
+        rockShape({center.x+9,center.y},13,18,hash+3,haze);
+        if(detailed) rockShape({center.x-5,center.y+7},9,9,hash+7,haze);
         break;
-    case 2: rockShape(center,25,VisualConfig::rockHeight*1.4f,hash);break;
+    case 2: rockShape(center,25,VisualConfig::rockHeight*1.4f,hash,haze);break;
     default:
         DrawEllipse(static_cast<int>(center.x+5),static_cast<int>(center.y+5),26,12,Fade(BLACK,0.2f));
-        DrawEllipse(static_cast<int>(center.x),static_cast<int>(center.y),24,12,{100,51,38,255});
-        DrawEllipse(static_cast<int>(center.x),static_cast<int>(center.y-3),22,10,{193,109,65,255});
-        DrawEllipse(static_cast<int>(center.x),static_cast<int>(center.y-2),17,7,{58,34,31,255});
-        DrawEllipse(static_cast<int>(center.x+2),static_cast<int>(center.y),13,5,{85,43,34,255});
-        if(detailed) rockShape({center.x+19,center.y+4},7,7,hash);
+        DrawEllipse(static_cast<int>(center.x),static_cast<int>(center.y),24,12,fogged({100,51,38,255},haze));
+        DrawEllipse(static_cast<int>(center.x),static_cast<int>(center.y-3),22,10,fogged({193,109,65,255},haze));
+        DrawEllipse(static_cast<int>(center.x),static_cast<int>(center.y-2),17,7,fogged({58,34,31,255},haze));
+        DrawEllipse(static_cast<int>(center.x+2),static_cast<int>(center.y),13,5,fogged({85,43,34,255},haze));
+        if(detailed) rockShape({center.x+19,center.y+4},7,7,hash,haze);
         break;
     }
 }
@@ -113,13 +119,15 @@ void beacon(Cell goal,float time,bool complete) {
     DrawLineEx(bottom,left,1.1f,VisualConfig::gold);DrawLineEx(left,top,1.1f,VisualConfig::gold);
 }
 void background(Rectangle v,const Camera2D& camera,const VisualEffects& effects) {
-    DrawRectangleGradientV(static_cast<int>(v.x),static_cast<int>(v.y),static_cast<int>(v.width),static_cast<int>(v.height),VisualConfig::skyTop,VisualConfig::skyBottom);
+    DrawRectangleGradientV(static_cast<int>(v.x),static_cast<int>(v.y),static_cast<int>(v.width),static_cast<int>(v.height),
+                           fogged(VisualConfig::skyTop,effects.sandstorm().backgroundHaze(0)*0.75f),
+                           fogged(VisualConfig::skyBottom,effects.sandstorm().backgroundHaze(0)*0.9f));
     DrawCircleGradient({v.x+v.width*0.8f,v.y+100},100,{219,139,96,25},{219,139,96,0});
     for(int layer=0;layer<2;++layer) {
         float rate=layer?VisualConfig::nearParallax:VisualConfig::farParallax;
         float shift=std::fmod(camera.target.x*rate,220.0f);
         float base=v.y+v.height*(layer?0.67f:0.48f)-camera.target.y*rate*0.3f;
-        Color color=layer?Color{62,37,40,255}:Color{43,33,42,255};
+        Color color=fogged(layer?Color{62,37,40,255}:Color{43,33,42,255},effects.sandstorm().backgroundHaze(layer));
         for(int i=-2;i<static_cast<int>(v.width/130)+3;++i) {
             float x=v.x+i*150.0f-shift;
             float height=60+((i+20)*73+layer*17)%90;
@@ -132,7 +140,6 @@ void background(Rectangle v,const Camera2D& camera,const VisualEffects& effects)
     DrawLineEx({bx,by},{bx,by-34},1,{128,92,80,150});
     DrawLineEx({bx-9,by-26},{bx+9,by-34},1,{151,113,94,150});
     DrawCircleV({bx,by-35},1.5f,{235,149,92,180});
-    (void)effects;
 }
 }
 std::uint32_t SceneRenderer::tileHash(int x,int y,std::uint32_t seed) {
@@ -143,6 +150,9 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
                          const VisualEffects& effects,Rectangle v,std::optional<Cell> hovered) const {
     const auto& grid=terrain.grid;const auto& search=sim.search();
     const auto& view=camera.view();const bool editing=sim.status()==SimulationStatus::EDIT_MAP;
+    const auto& storm=effects.sandstorm();
+    Vector2 focus=sim.rover().available()?project(static_cast<float>(sim.rover().x()+0.5),static_cast<float>(sim.rover().y()+0.5)):
+                                       project(terrain.start.x+0.5f,terrain.start.y+0.5f);
     BeginScissorMode(static_cast<int>(v.x),static_cast<int>(v.y),static_cast<int>(v.width),static_cast<int>(v.height));
     background(v,view,effects);
     Vector2 lo=GetScreenToWorld2D({v.x,v.y},view),hi=GetScreenToWorld2D({v.x+v.width,v.y+v.height},view);
@@ -159,7 +169,8 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
     const bool detail=view.zoom>VisualConfig::detailZoomThreshold;
     for(int y=0;y<grid.height();++y) for(int x=0;x<grid.width();++x) {
         Cell c{x,y};Vector2 p=project(x+0.5f,y+0.5f);if(!onScreen(p)) continue;
-        ground(c,tileHash(x,y,terrain.config.seed),detail,terrain.config.seed);
+        float haze=storm.haze(p,focus,view.zoom);
+        ground(c,tileHash(x,y,terrain.config.seed),detail,terrain.config.seed,haze);
         if(states[index(c)]==CellState::OPEN) {
             diamond(c,0,Fade(SKYBLUE,VisualConfig::openAlpha));
             diamond(c,0.12f,Fade(VisualConfig::cyan,0.38f),true,0.9f);
@@ -179,7 +190,7 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
         for(std::size_t i=0;i<path.size() && i<=segments;++i) {
             auto p=project(path[i].x+0.5f,path[i].y+0.5f);
             if(!onScreen(p)) continue;
-            Color color=active?VisualConfig::gold:Color{121,101,77,110};
+            Color color=fogged(active?VisualConfig::gold:Color{121,101,77,110},storm.haze(p,focus,view.zoom));
             diamond(path[i],0.20f,Fade(color,active?0.10f:0.06f));
             if(i) {
                 auto a=project(path[i-1].x+0.5f,path[i-1].y+0.5f);
@@ -207,6 +218,7 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
     if(sim.status()==SimulationStatus::PATH_REVEAL && !search.path().empty())
         diamond(search.path()[sim.revealed()],0.15f,Fade(VisualConfig::gold,0.65f+0.3f*std::sin(effects.time()*6)),true,2);
     diamond(terrain.start,0.2f,Fade(VisualConfig::cyan,0.5f),true,1);
+    storm.drawGround(grid.width(),grid.height(),visible);
     Rover parked;
     if(!sim.rover().available()) parked.reset({terrain.start});
     const Rover& rover=sim.rover().available()?sim.rover():parked;
@@ -217,7 +229,7 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
         for(int y=std::max(0,depth-grid.width()+1);y<=std::min(grid.height()-1,depth);++y) {
             int x=depth-y;Cell cell{x,y};auto p=project(x+0.5f,y+0.5f);
             if(!onScreen(p)) continue;
-            if(grid.blocked(cell)) obstacle(cell,tileHash(x,y,terrain.config.seed),detail);
+            if(grid.blocked(cell)) obstacle(cell,tileHash(x,y,terrain.config.seed),detail,storm.haze(p,focus,view.zoom));
             if(cell==terrain.goal) beacon(terrain.goal,effects.time(),sim.status()==SimulationStatus::MISSION_COMPLETE);
         }
         if(!roverDrawn && depth>=roverDepth) {
@@ -231,18 +243,24 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
         float t=p.age/p.life;
         DrawCircleV(pos,p.size*(1+t),Fade(Color{212,143,98,255},0.22f*(1-t)));
     }
+    if(storm.strength()>0) {
+        // Light scattering is visual only; neither rover model nor beacon behavior is changed.
+        Vector2 front=project(static_cast<float>(rover.x()+0.5+std::cos(rover.heading())*0.35),
+                              static_cast<float>(rover.y()+0.5+std::sin(rover.heading())*0.35));
+        DrawCircleGradient({front.x,front.y-8},13,Fade(Color{255,242,204,255},storm.strength()*0.24f),Fade(WHITE,0));
+        Vector2 beaconPosition=project(terrain.goal.x+0.5f,terrain.goal.y+0.5f);
+        if(onScreen(beaconPosition)) DrawCircleGradient({beaconPosition.x,beaconPosition.y-34},20,
+            Fade(VisualConfig::gold,storm.strength()*0.22f),Fade(VisualConfig::gold,0));
+    }
     EndMode2D();
     // Constant-size screen-space motes, clipped to world, with bounded draw count.
-    int motes=effects.storm()?VisualConfig::stormCount:VisualConfig::ambientCount;
+    int motes=VisualConfig::ambientCount;
     for(int i=0;i<motes;++i) {
         auto h=tileHash(i,7,terrain.config.seed);
-        float x=std::fmod((h%10000)/10000.0f*v.width+effects.time()*VisualConfig::windX*(effects.storm()?3:1),v.width);
+        float x=std::fmod((h%10000)/10000.0f*v.width+effects.time()*VisualConfig::windX,v.width);
         float y=std::fmod(((h>>12)%10000)/10000.0f*v.height+effects.time()*VisualConfig::windY,v.height);
-        DrawLineEx({v.x+x,v.y+y},{v.x+x+(effects.storm()?10:2),v.y+y+1},1,Color{232,172,119,static_cast<unsigned char>(effects.storm()?45:24)});
+        DrawLineEx({v.x+x,v.y+y},{v.x+x+2,v.y+y+1},1,Color{232,172,119,24});
     }
-    if(effects.storm()) {
-        DrawRectangleRec(v,Fade(Color{192,125,79,255},VisualConfig::stormOpacity));
-        DrawRectangleGradientV(static_cast<int>(v.x),static_cast<int>(v.y),static_cast<int>(v.width),static_cast<int>(v.height),Color{172,112,75,65},Color{172,112,75,0});
-    }
+    storm.drawAir(v);
     EndScissorMode();
 }

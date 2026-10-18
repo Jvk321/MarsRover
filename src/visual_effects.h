@@ -1,6 +1,7 @@
 #pragma once
 #include "simulation.h"
 #include "raylib.h"
+#include "sandstorm.h"
 #include <deque>
 #include <random>
 struct TrackMark { Vector2 from,to; float heading; };
@@ -10,8 +11,10 @@ class VisualEffects {
 public:
     void reset(std::uint32_t seed);
     void update(float dt,const Simulation& sim,Cell start);
-    void setStorm(bool enabled) { storm_=enabled; }
-    bool storm() const { return storm_; }
+    void setStorm(bool enabled) { sandstorm_.setEnabled(enabled); }
+    bool storm() const { return sandstorm_.enabled(); }
+    void setStormIntensity(StormIntensity level) { sandstorm_.setIntensity(level); }
+    const Sandstorm& sandstorm() const { return sandstorm_; }
     float time() const { return time_; }
     const std::deque<TrackMark>& tracks() const { return tracks_; }
     const std::vector<DustParticle>& dust() const { return dust_; }
@@ -21,7 +24,8 @@ private:
     std::vector<DustParticle> dust_;
     std::vector<ScanPulse> scans_;
     std::mt19937 random_{42};
-    bool storm_=false,hadPose_=false,wasMoving_=false;
+    Sandstorm sandstorm_;
+    bool hadPose_=false,wasMoving_=false;
     Vector2 lastPose_{},trackPose_{};
     float time_=0,emission_=0,scanTime_=0;
     SimulationStatus previous_=SimulationStatus::READY;

@@ -247,6 +247,10 @@ int main(int argc,char** argv) {
         scene.draw(terrain,simulation,worldCamera,effects,viewport,
                    editing && !terrainPanel.open ? hovered : std::nullopt);
         DrawText(editing ? "LMB: tool  /  RMB: paint" : "WASD / MMB: pan   WHEEL: zoom",320,GetScreenHeight()-22,15,Color{150,175,186,255});
+        const char* stormNames[]{"LIGHT","MEDIUM","HEAVY"};
+        if(button({static_cast<float>(GetScreenWidth()-370),static_cast<float>(GetScreenHeight()-28),120,24},
+                  stormNames[static_cast<int>(effects.sandstorm().intensity())]))
+            effects.setStormIntensity(static_cast<StormIntensity>((static_cast<int>(effects.sandstorm().intensity())+1)%3));
         if(button({static_cast<float>(GetScreenWidth()-240),static_cast<float>(GetScreenHeight()-28),220,24},
                   effects.storm() ? "SANDSTORM: ON" : "SANDSTORM: OFF")) effects.setStorm(!effects.storm());
         if (simulation.status()==SimulationStatus::ROUTE_BLOCKED || simulation.status()==SimulationStatus::NO_ROUTE) {

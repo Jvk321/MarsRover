@@ -6,6 +6,7 @@ float VisualEffects::randomFloat() { return (random_()%10000)/10000.0f; }
 void VisualEffects::reset(std::uint32_t seed) {
     tracks_.clear();dust_.clear();scans_.clear();random_.seed(seed);
     hadPose_=false;wasMoving_=false;time_=emission_=scanTime_=0;previous_=SimulationStatus::READY;
+    sandstorm_.reset(seed);
 }
 void VisualEffects::update(float dt,const Simulation& sim,Cell start) {
     const auto& rover=sim.rover();
@@ -19,6 +20,7 @@ void VisualEffects::update(float dt,const Simulation& sim,Cell start) {
     const bool running=sim.playing() || sim.status()==SimulationStatus::READY || sim.status()==SimulationStatus::EDIT_MAP;
     float tick=running?std::clamp(dt,0.0f,0.1f):(moved || (searching && phaseChanged) ? 1.0f/60:0);
     time_+=tick;
+    sandstorm_.update(tick);
     if (!hadPose_) { trackPose_=pose;lastPose_=pose;hadPose_=true; }
     if (moved && rover.available()) {
         float remaining=std::hypot(pose.x-trackPose_.x,pose.y-trackPose_.y);
@@ -35,7 +37,7 @@ void VisualEffects::update(float dt,const Simulation& sim,Cell start) {
     dust_.erase(std::remove_if(dust_.begin(),dust_.end(),[](const auto& p){return p.age>=p.life;}),dust_.end());
     const bool turning=rover.available() && rover.turning() && sim.status()==SimulationStatus::DRIVING;
     if(tick>0 && (moved || turning)) {
-        emission_+=tick*(turning?VisualConfig::turnDustRate:VisualConfig::dustRate)*(storm_?1.5f:1);
+        emission_+=tick*(turning?VisualConfig::turnDustRate:VisualConfig::dustRate)*(1+sandstorm_.strength()*0.5f);
         if(moved && !wasMoving_) emission_+=8;
         int spawn=std::min(32,static_cast<int>(emission_));emission_-=spawn;
         for(int i=0;i<spawn && dust_.size()<VisualConfig::maxDust;++i) {

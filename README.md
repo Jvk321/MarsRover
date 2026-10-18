@@ -220,7 +220,7 @@ LIDAR jest wylacznie wizualizacja, nie zmienia wiedzy algorytmu o mapie.
 | `src/visual_config.h` | maxDust=384, maxTracks=16000, trackSpacing=0.10 pola, trackHalfWidth=0.29 |
 | `src/visual_config.h` | dustLife=1.8 s, dustRate=32/s, turnDustRate=48/s, windX/windY |
 | `src/visual_config.h` | scanInterval=3 s, scanLife=2.4 s, scanRadius=145 jednostek swiata |
-| `src/visual_config.h` | ambientCount=72, stormCount=220, stormOpacity=0.16, antennaSpeed, beaconSignalSpeed |
+| `src/visual_config.h` | ambientCount=72, antennaSpeed, beaconSignalSpeed; parametry burzy sa w `src/sandstorm.h` |
 | `src/scene_renderer.cpp` | ksztalty terenu, skal, kraterow, beaconu, detal gruntu i grubosci projekcji |
 | `src/rover_renderer.cpp` | geometria korpusu, kol, masztu i swiatel |
 | `src/main.cpp`, `src/terrain_panel.cpp` | kolory i geometria paneli/przyciskow |
@@ -245,3 +245,41 @@ Pierwszy program uruchamia ukryte okno OpenGL i zapisuje SEARCHING, PATH_REVEAL,
 DRIVING, SANDSTORM, kamere manualna, ROUTE_BLOCKED, RECALCULATING i MISSION_COMPLETE.
 Drugi zapisuje rzeczywisty panel aplikacji i zamyka okno. Katalog wyjsciowy musi istniec
 (tworzy go `visual_smoke`). Testy GPU sa osobne od `ctest`, ktory sprawdza logike i dane efektow.
+
+## Warstwowa burza piaskowa
+
+SANDSTORM ON/OFF pozostaje w prawym dolnym rogu. Przycisk obok przelacza
+LIGHT -> MEDIUM -> HEAVY. Zarowno wlaczenie, jak i wylaczenie trwa ok. 2.5 s;
+zmiana poziomu rowniez jest wygladzona. PAUSE zatrzymuje ruch pylu i zegar podmuchow.
+Nie ma jednolitego pomaranczowego filtra ani zmian kamery.
+
+Burza ma osobne warstwy: szybkie bliskie smugi o roznych rozmiarach/przezroczystosci,
+drobniejszy falujacy pyl w sredniej odleglosci, neutralne zamglenie dalekich gor
+i terenu oraz cienkie pasma na plaszczyznie izometrycznej.
+W poblizu rovera pozostaje strefa czytelnej trasy. Dalej maleje nasycenie i kontrast;
+zamglenie obejmuje materialy i tlo, nie nakladke na caly ekran.
+Swiatla pojazdu i beaconu dostaja subtelna poswiate rozpraszana przez pyl.
+Podmuchy zwiekszaja liczbe/szybkosc czastek i dodaja kilka szerokich, miekkich smug.
+
+Wszystkie parametry burzy: `src/sandstorm.h`, przestrzen nazw `StormConfig`:
+
+| Parametr | LIGHT | MEDIUM | HEAVY |
+| --- | --- | --- | --- |
+| nearCount / nearGust | 16 / 28 | 40 / 66 | 72 / 112 |
+| midCount / midGust | 90 / 145 | 220 / 330 | 390 / 512 |
+| groundCount / groundGust | 10 / 16 | 22 / 34 | 36 / 56 |
+| haze | 0.20 | 0.43 | 0.70 |
+| speed | 0.65 | 1.0 | 1.35 |
+
+- Particle count i storm intensity: `profiles`, wyzej limity podstawowe / podmuch.
+- Wind direction: `windDirection = {1.0, 0.32}` (prawo i w dol sceny).
+- Gust frequency: `gustInterval = 5.5 s`; `gustDuration = 1.15 s`, `gustSpeedBoost = 1.3`.
+- Haze strength: `profiles[].haze`, neutralny `hazeColor`, `clearRadius = 105 px`, `fadeDistance = 560 px`.
+- Transition: `transitionSeconds = 2.5`.
+- Predkosci warstw: `nearSpeed`, `midSpeed`, `groundSpeed`.
+
+`Sandstorm` przechowuje stale pule `std::array`: 112 near, 512 mid, 56 ground.
+Aktualizacja i rysowanie burzy nie alokuja pamieci; liczba aktywnych czastek
+zalezy od profilu, narastania i podmuchu. Ground dust jest przycinany do mapy i widoku.
+Test `layered_sandstorm` sprawdza przejscia, podmuchy, limity i strefe czytelnosci.
+`visual_smoke` zapisuje tez podglady `04a-light.png`, `04b-medium.png`, `04c-heavy.png` na mapie 80x60.

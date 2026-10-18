@@ -42,6 +42,12 @@ int main(int argc,char** argv) {
     wait(SimulationStatus::PATH_REVEAL);for(int i=0;i<20;++i) frame();capture("02-path-reveal");
     wait(SimulationStatus::DRIVING);for(int i=0;i<90;++i) frame();capture("03-driving");
     effects.setStorm(true);for(int i=0;i<20;++i) frame();capture("04-sandstorm");
+    const char* levels[]{"04a-light","04b-medium","04c-heavy"};
+    for(int level=0;level<3;++level) {
+        effects.setStormIntensity(static_cast<StormIntensity>(level));
+        for(int i=0;i<90;++i) frame();
+        capture(levels[level]);
+    }
     CameraInput input;input.worldHovered=true;input.wheel=2;input.drag={35,10};
     camera.update(0.1f,CameraPhase::FOLLOW,{},0,true,input);capture("05-manual-camera");
     effects.setStorm(false);camera.setAuto(true);
