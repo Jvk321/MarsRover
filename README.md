@@ -1,6 +1,6 @@
 # Mars Rover A* Navigation Simulator 2.5D
 
-Etap 2: raylib, mapa izometryczna i wizualizacja A* krok po kroku. Bez rovera, efektow i dzwieku.
+Etap 3: iteracyjny A* i animowane odkrywanie znalezionej trasy. Bez rovera, efektow i dzwieku.
 
 ## Windows / MSYS2 UCRT64
 
@@ -28,8 +28,10 @@ Zamknij okno lub nacisnij Escape, aby zakonczyc.
 
 - `src/astar.h`, `src/astar.cpp`: dynamiczny `Grid(width, height)` i `findPath` bez zaleznosci od raylib.
 - `src/main.cpp`: przykladowa mapa 24x14, przeszkody, start, cel i trasa; rozmiar mozna zmienic w konstruktorze `Grid`.
+- `src/simulation.h`, `src/simulation.cpp`: stan symulacji, odtwarzanie, zegar i odkrywanie trasy; bez raylib.
 - `legacy/astar_original.cpp`: oryginalny program, zachowany bez zmian i niewlaczony do kompilacji.
 - `tests/astar_tests.cpp`: mapy prostokatne, granice, przeszkody, brak trasy i start rowny celowi.
+- `tests/simulation_tests.cpp`: automatyczne odkrywanie, pauza, STEP, RESET i mapa 33x25.
 
 Zachowano ruch gora/dol/lewo/prawo, koszt 1, heurystyke euklidesowa,
 listy otwarta/zamknieta oraz wybor ostatniego elementu przy remisie f.
@@ -43,17 +45,29 @@ Poniewaz repozytorium nie zawieralo `grid.txt`, demonstracja tworzy mape w pamie
 
 Program zaczyna w stanie READY, z wstrzymanym odtwarzaniem.
 
-- PLAY / PAUSE (Spacja): automatyczne iteracje lub zatrzymanie.
-- STEP (N): zatrzymuje odtwarzanie i wykonuje dokladnie jedna iteracje.
+- PLAY / PAUSE (Spacja): odtwarzanie lub zatrzymanie eksploracji i odkrywania trasy.
+- STEP (N): zatrzymuje odtwarzanie i wykonuje jedna iteracje A* lub odslania jeden segment trasy.
 - RESET (R): czysci wyszukiwanie i wraca do READY, zachowujac wybrana predkosc.
-- Suwak oraz przyciski - / +: predkosc 1-60 iteracji na sekunde.
+- Suwak oraz przyciski - / +: predkosc 1-60 krokow na sekunde, wspolna dla obu faz.
 
 OPEN jest niebieskie, CLOSED ciemnofioletowe, CURRENT ma jasna pulsujaca ramke.
-S i G oznaczaja start i cel. Zolta trasa pojawia sie dopiero w PATH_FOUND;
-odtwarzanie zatrzymuje sie wtedy automatycznie. NO_PATH oznacza wyczerpanie OPEN,
+S i G oznaczaja start i cel. Po PATH_FOUND algorytm A* juz sie nie zmienia,
+a symulacja przechodzi do PATH_REVEAL (panel: REVEALING PATH...).
+Trasa odtworzona po rodzicach jest uporzadkowana od START do GOAL.
+Na poczatku podswietlony jest tylko START; kazdy krok odslania jeden segment
+do nastepnego pola. Odkryte pola sa jasnozlote, a ostatnie odsloniete pole
+ma pulsujaca ramke. Nieodkryta czesc nie ma oznaczenia trasy; OPEN i CLOSED pozostaja widoczne.
+PLAY kontynuuje automatycznie odkrywanie, PAUSE zamraza postep,
+a STEP odslania dokladnie jeden segment i pozostawia symulacje w pauzie.
+Po dotarciu do GOAL symulacja przechodzi do PATH_READY i zatrzymuje odtwarzanie.
+NO_PATH oznacza wyczerpanie OPEN,
 a INVALID_ENDPOINTS niepoprawny start lub cel. Aby zaczac ponownie, uzyj RESET.
 Panel pokazuje status wyszukiwania, stan odtwarzania, x/y, g/h/f biezacego pola,
 liczebnosc OPEN i CLOSED oraz liczbe iteracji. CLOSED zawiera takze CURRENT.
+PATH LENGTH to liczba segmentow (liczba pol minus jeden, czyli koszt trasy).
+REVEALED pokazuje odkryte segmenty / wszystkie segmenty.
+RESET dziala takze podczas PATH_REVEAL: czysci trase, licznik odkrywania i wyszukiwanie.
+Dla START = GOAL trasa nie ma segmentow i od razu osiaga PATH_READY.
 
 `AStarSearch` przechowuje kopie mapy i nie zalezy od raylib ani zegara.
 `step()` wybiera jedno pole o najmniejszym f (ostatnie przy remisie), przenosi
