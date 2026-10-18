@@ -1,6 +1,7 @@
 #pragma once
 #include "raylib.h"
 #include <vector>
+#include "astar.h"
 
 enum class CameraPhase { WIDE, REVEAL, FOLLOW, ARRIVAL, COMPLETE };
 struct CameraInput {
@@ -13,6 +14,7 @@ class WorldCamera {
 public:
     WorldCamera(int width, int height, Rectangle viewport);
     static Vector2 project(double x, double y);
+    std::optional<Cell> pick(Vector2 screen, int width, int height) const;
     void resize(Rectangle viewport);
     void reset();
     void setAuto(bool enabled) { automatic_ = enabled; }

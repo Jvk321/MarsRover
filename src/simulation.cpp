@@ -3,7 +3,7 @@
 #include <cmath>
 
 bool Simulation::active() const {
-    return status_ == SimulationStatus::READY || status_ == SimulationStatus::SEARCHING ||
+    return status_ == SimulationStatus::EDIT_MAP || status_ == SimulationStatus::READY || status_ == SimulationStatus::SEARCHING ||
            status_ == SimulationStatus::PATH_REVEAL || status_ == SimulationStatus::PATH_READY ||
            status_ == SimulationStatus::DRIVING || status_ == SimulationStatus::ARRIVAL;
 }
@@ -21,13 +21,23 @@ void Simulation::syncSearch() {
 void Simulation::reset() {
     search_.reset(); rover_.reset(); revealed_ = 0; playing_ = false; elapsed_ = 0; arrivalTime_ = 0; syncSearch();
 }
-void Simulation::play() { if (active()) { playing_ = true; elapsed_ = 0; } }
+void Simulation::replaceMap(const Grid& grid,Cell start,Cell goal,bool editing) {
+    search_=AStarSearch(grid,start,goal);
+    reset();
+    if (editing) status_=SimulationStatus::EDIT_MAP;
+}
+void Simulation::enterEdit() { reset(); status_=SimulationStatus::EDIT_MAP; }
+void Simulation::play() {
+    if (status_==SimulationStatus::EDIT_MAP) syncSearch();
+    if (active()) { playing_ = true; elapsed_ = 0; }
+}
 void Simulation::pause() { playing_ = false; elapsed_ = 0; }
 void Simulation::setSpeed(double speed) {
     if (std::isfinite(speed)) speed_ = std::clamp(speed, 1.0, 60.0);
 }
 void Simulation::advance() {
     if (!active()) return;
+    if (status_==SimulationStatus::EDIT_MAP) syncSearch();
     if (status_ == SimulationStatus::PATH_READY) {
         rover_.reset(search_.path());
         status_ = rover_.complete() ? SimulationStatus::ARRIVAL : SimulationStatus::DRIVING;

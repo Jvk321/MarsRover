@@ -1,13 +1,16 @@
 #include "simulation.h"
 #include "rover_renderer.h"
 #include "world_camera.h"
+#include "terrain_panel.h"
 #include "raylib.h"
 #include <algorithm>
 #include <cmath>
 
 namespace {
+bool uiBlocked=false;
 const char* statusName(SimulationStatus status) {
     switch (status) {
+    case SimulationStatus::EDIT_MAP: return "EDIT_MAP";
     case SimulationStatus::READY: return "READY";
     case SimulationStatus::SEARCHING: return "SEARCHING";
     case SimulationStatus::PATH_REVEAL: return "REVEALING PATH...";
@@ -21,17 +24,23 @@ const char* statusName(SimulationStatus status) {
     return "UNKNOWN";
 }
 bool button(Rectangle rect, const char* label, bool enabled = true) {
-    bool hover = enabled && CheckCollisionPointRec(GetMousePosition(), rect);
+    bool hover = enabled && !uiBlocked && CheckCollisionPointRec(GetMousePosition(), rect);
     DrawRectangleRec(rect, !enabled ? Color{40,40,45,255} : hover ? Color{85,85,105,255} : Color{58,58,73,255});
     DrawText(label, static_cast<int>(rect.x + 10), static_cast<int>(rect.y + 11), 18, enabled ? RAYWHITE : GRAY);
     return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 }
 int main() {
-    Grid grid(24, 14);
-    for (int y = 2; y < grid.height() - 2; ++y)
-        if (y != 8) grid.setBlocked({grid.width() / 2, y});
-    const Cell start{1,1}, goal{grid.width()-2,grid.height()-2};
+    Terrain terrain(TerrainConfig{});
+    const auto& grid=terrain.grid;
+    const auto& start=terrain.start;
+    const auto& goal=terrain.goal;
+    TerrainPanel terrainPanel(terrain.config);
+    std::optional<TerrainConfig> pendingTerrain;
+    EditTool editTool=EditTool::SET_START;
+    std::optional<Cell> lastPaint;
+    bool rightPaintValue=true;
+    int obstacleCount=terrain.obstacleCount();
     Simulation simulation(grid, start, goal);
     const auto& search = simulation.search();
 
@@ -43,9 +52,19 @@ int main() {
     if (!IsWindowReady()) return 1;
     SetWindowMinSize(1000, 940);
     SetTargetFPS(60);
-    WorldCamera worldCamera(grid.width(),grid.height(),{300,80,980,880});
+    WorldCamera worldCamera(grid.width(),grid.height(),{300,140,980,790});
     std::size_t cameraPathSize = 0;
     while (!WindowShouldClose()) {
+        const Rectangle viewport{300,140,static_cast<float>(GetScreenWidth()-300),static_cast<float>(GetScreenHeight()-170)};
+        if (pendingTerrain) {
+            terrain=Terrain(*pendingTerrain); pendingTerrain.reset();
+            simulation.replaceMap(grid,start,goal,true);
+            bool autoCamera=worldCamera.automatic();
+            worldCamera=WorldCamera(grid.width(),grid.height(),viewport);
+            worldCamera.setAuto(autoCamera);
+            obstacleCount=terrain.obstacleCount(); cameraPathSize=0; lastPaint.reset();
+        }
+        uiBlocked=terrainPanel.open;
         BeginDrawing();
         ClearBackground({28,24,25,255});
         DrawRectangle(0,0,300,GetScreenHeight(),{32,31,40,255});
@@ -55,10 +74,10 @@ int main() {
         bool pause = button({152,65,120,42},"PAUSE",simulation.playing());
         bool step = button({20,117,120,42},"STEP",simulation.active());
         bool reset = button({152,117,120,42},"RESET");
-        play = play || (IsKeyPressed(KEY_SPACE) && !simulation.playing());
-        pause = pause || (IsKeyPressed(KEY_SPACE) && simulation.playing());
-        step = step || IsKeyPressed(KEY_N);
-        reset = reset || IsKeyPressed(KEY_R);
+        play = play || (!uiBlocked && IsKeyPressed(KEY_SPACE) && !simulation.playing());
+        pause = pause || (!uiBlocked && IsKeyPressed(KEY_SPACE) && simulation.playing());
+        step = step || (!uiBlocked && IsKeyPressed(KEY_N));
+        reset = reset || (!uiBlocked && IsKeyPressed(KEY_R));
         if (reset) simulation.reset();
         else if (step) simulation.step();
         else if (pause) simulation.pause();
@@ -67,7 +86,7 @@ int main() {
         if (button({20,207,40,36},"-")) speed = std::max(1.0f,speed-1);
         if (button({232,207,40,36},"+")) speed = std::min(60.0f,speed+1);
         Rectangle track{76,220,140,10};
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(),{70,207,152,36})) {
+        if (!uiBlocked && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(),{70,207,152,36})) {
             float fraction = std::clamp((GetMouseX()-track.x)/track.width,0.0f,1.0f);
             speed = std::round(1 + fraction*59);
         }
@@ -78,7 +97,7 @@ int main() {
         if (button({20,620,40,36},"-")) drivingSpeed = std::max(0.25f,drivingSpeed-0.25f);
         if (button({232,620,40,36},"+")) drivingSpeed = std::min(5.0f,drivingSpeed+0.25f);
         Rectangle driveTrack{76,633,140,10};
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(),{70,620,152,36}))
+        if (!uiBlocked && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && CheckCollisionPointRec(GetMousePosition(),{70,620,152,36}))
             drivingSpeed = 0.25f + 4.75f*std::clamp((GetMouseX()-driveTrack.x)/driveTrack.width,0.0f,1.0f);
         DrawRectangleRec(driveTrack,GRAY);
         DrawCircle(static_cast<int>(driveTrack.x+(drivingSpeed-0.25f)/4.75f*driveTrack.width),638,7,ORANGE);
@@ -111,7 +130,23 @@ int main() {
         DrawText("Space: play/pause\nN: step (drive: 1/60 s)\nR: reset\nPath length = segments",20,790,16,LIGHTGRAY);
         if (button({20,880,252,38},worldCamera.automatic() ? "AUTO CAMERA: ON" : "AUTO CAMERA: OFF"))
             worldCamera.setAuto(!worldCamera.automatic());
-        const Rectangle viewport{300,80,static_cast<float>(GetScreenWidth()-300),static_cast<float>(GetScreenHeight()-80)};
+        if (button({320,12,130,36},"NEW MAP")) { terrainPanel.open=true; simulation.pause(); }
+        if (button({460,12,130,36},"GENERATE")) { pendingTerrain=terrain.config; simulation.pause(); }
+        if (button({600,12,130,36},"EDIT MAP")) { simulation.enterEdit(); cameraPathSize=0; }
+        if (button({740,12,145,36},"CLEAR PATH")) {
+            simulation.replaceMap(grid,start,goal,simulation.status()==SimulationStatus::EDIT_MAP); cameraPathSize=0;
+        }
+        DrawText(TextFormat("MAP: %d x %d   OBSTACLES: %d / %.1f%%   SEED: %u",grid.width(),grid.height(),obstacleCount,
+                            100.0*obstacleCount/(grid.width()*grid.height()),terrain.config.seed),320,59,17,LIGHTGRAY);
+        const bool editing=simulation.status()==SimulationStatus::EDIT_MAP;
+        if (editing) {
+            const char* tools[]{"SET START","SET GOAL","ADD ROCK","ERASER"};
+            for (int i=0;i<4;++i) {
+                Rectangle rect{320+i*140.0f,90,130,34};
+                if (button(rect,tools[i])) editTool=static_cast<EditTool>(i);
+                if (editTool==static_cast<EditTool>(i)) DrawRectangleLinesEx(rect,2,GOLD);
+            }
+        } else DrawText("OPEN: blue | CLOSED: purple | Gold: path | EDIT MAP to change terrain",320,96,16,LIGHTGRAY);
         worldCamera.resize(viewport);
         if (reset) { worldCamera.reset(); cameraPathSize = 0; }
         if (search.path().size()!=cameraPathSize) {
@@ -126,35 +161,76 @@ int main() {
         if (simulation.status()==SimulationStatus::ARRIVAL) phase=CameraPhase::ARRIVAL;
         if (simulation.status()==SimulationStatus::MISSION_COMPLETE) phase=CameraPhase::COMPLETE;
         CameraInput cameraInput;
-        cameraInput.worldHovered=CheckCollisionPointRec(GetMousePosition(),viewport);
+        cameraInput.worldHovered=!terrainPanel.open && CheckCollisionPointRec(GetMousePosition(),viewport);
         cameraInput.wheel=GetMouseWheelMove();
         if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) cameraInput.drag=GetMouseDelta();
         cameraInput.keys={static_cast<float>(IsKeyDown(KEY_D)-IsKeyDown(KEY_A)),
                           static_cast<float>(IsKeyDown(KEY_S)-IsKeyDown(KEY_W))};
         worldCamera.update(GetFrameTime(),phase,WorldCamera::project(rover.x()+0.5,rover.y()+0.5),rover.heading(),
                            simulation.playing() || simulation.status()==SimulationStatus::READY,cameraInput);
+        const auto hovered=worldCamera.pick(GetMousePosition(),grid.width(),grid.height());
+        if (!hovered) lastPaint.reset();
+        if (!IsMouseButtonDown(MOUSE_BUTTON_RIGHT) && !IsMouseButtonDown(MOUSE_BUTTON_LEFT)) lastPaint.reset();
+        if (editing && !terrainPanel.open && hovered && !IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+            bool changed=false;
+            if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+                rightPaintValue=!grid.blocked(*hovered);
+                lastPaint.reset();
+            }
+            if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) && (!lastPaint || !(*lastPaint==*hovered))) {
+                changed=terrain.stroke(lastPaint.value_or(*hovered),*hovered,rightPaintValue ? EditTool::ADD_ROCK : EditTool::ERASER);
+                lastPaint=*hovered;
+            } else if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                if ((editTool==EditTool::SET_START || editTool==EditTool::SET_GOAL) ? IsMouseButtonPressed(MOUSE_BUTTON_LEFT)
+                    : (!lastPaint || !(*lastPaint==*hovered))) {
+                    if (editTool==EditTool::ADD_ROCK || editTool==EditTool::ERASER)
+                        changed=terrain.stroke(lastPaint.value_or(*hovered),*hovered,editTool);
+                    else changed=terrain.edit(*hovered,editTool);
+                    lastPaint=*hovered;
+                }
+            }
+            if (changed) {
+                simulation.replaceMap(grid,start,goal,true); cameraPathSize=0; obstacleCount=terrain.obstacleCount();
+            }
+        }
         constexpr float halfW=32,halfH=16;
         const Vector2 origin{0,0};
         auto project = [=](int x,int y) {
             return Vector2{origin.x+(x-y)*halfW,origin.y+(x+y)*halfH};
         };
-        DrawText("OPEN: blue | CLOSED: dark purple | CURRENT: bright outline",320,20,17,LIGHTGRAY);
-        DrawText("S: start | G: goal | Gold: revealed path from start to goal",320,46,17,LIGHTGRAY);
-        DrawText("Wheel: zoom | MMB / WASD: pan (manual camera)",320,GetScreenHeight()-24,16,LIGHTGRAY);
-        BeginScissorMode(300,80,GetScreenWidth()-300,GetScreenHeight()-110);
+        DrawText(editing ? "LMB: selected tool | RMB drag: toggle/paint | PLAY: run A*" : "Wheel: zoom | MMB / WASD: pan (manual camera)",320,GetScreenHeight()-24,16,LIGHTGRAY);
+        BeginScissorMode(300,140,GetScreenWidth()-300,GetScreenHeight()-170);
         BeginMode2D(worldCamera.view());
+        // Build renderer-only masks once per frame, keeping large maps responsive.
+        const auto count=static_cast<std::size_t>(grid.width())*grid.height();
+        std::vector<CellState> states(count,CellState::UNVISITED);
+        std::vector<bool> pathMask(count,false);
+        auto index=[&](Cell c){ return static_cast<std::size_t>(c.y)*grid.width()+c.x; };
+        if (!editing) {
+            for (const auto& node:search.open()) states[index(node.cell)]=CellState::OPEN;
+            for (const auto& node:search.closed()) states[index(node.cell)]=CellState::CLOSED;
+            if (search.current()) states[index(search.current()->cell)]=CellState::CURRENT;
+            if (!search.path().empty())
+                for (std::size_t i=0;i<=simulation.revealed();++i) pathMask[index(search.path()[i])]=true;
+        }
         for (int y=0;y<grid.height();++y) for (int x=0;x<grid.width();++x) {
             Cell cell{x,y};
             Color color = grid.blocked(cell) ? Color{65,49,45,255} : Color{161,94,64,255};
-            CellState state = search.state(cell);
+            CellState state = states[index(cell)];
             if (state == CellState::OPEN) color = Color{45,115,210,255};
             if (state == CellState::CLOSED || state == CellState::CURRENT) color = Color{60,32,85,255};
-            if (simulation.visible(cell)) color = Color{255,218,55,255};
+            if (pathMask[index(cell)]) color = Color{255,218,55,255};
+            if (editing && cell==start) color=Color{60,160,100,255};
+            if (editing && cell==goal) color=Color{80,160,220,255};
             Vector2 top=project(x,y), right=project(x+1,y), bottom=project(x+1,y+1), left=project(x,y+1);
             DrawTriangle(top,left,bottom,color); DrawTriangle(top,bottom,right,color);
             Color edge{55,39,34,255};
             DrawLineV(top,right,edge); DrawLineV(right,bottom,edge);
             DrawLineV(bottom,left,edge); DrawLineV(left,top,edge);
+            if (editing && hovered && *hovered==cell && !terrainPanel.open) {
+                DrawLineEx(top,right,2,WHITE); DrawLineEx(right,bottom,2,WHITE);
+                DrawLineEx(bottom,left,2,WHITE); DrawLineEx(left,top,2,WHITE);
+            }
             if (cell == start || cell == goal) {
                 const char* label = cell == start ? "S" : "G";
                 DrawText(label,static_cast<int>((top.x+bottom.x)/2-4),static_cast<int>((top.y+bottom.y)/2-7),14,RAYWHITE);
@@ -173,6 +249,7 @@ int main() {
         drawRover(simulation.rover(),origin,halfW,halfH);
         EndMode2D();
         EndScissorMode();
+        if (auto config=terrainPanel.draw()) pendingTerrain=*config;
         EndDrawing();
     }
     CloseWindow();

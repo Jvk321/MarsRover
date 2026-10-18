@@ -2,13 +2,15 @@
 #include "astar.h"
 #include "rover.h"
 
-enum class SimulationStatus { READY, SEARCHING, PATH_REVEAL, PATH_READY, DRIVING, ARRIVAL, MISSION_COMPLETE, NO_PATH, INVALID_ENDPOINTS };
+enum class SimulationStatus { EDIT_MAP, READY, SEARCHING, PATH_REVEAL, PATH_READY, DRIVING, ARRIVAL, MISSION_COMPLETE, NO_PATH, INVALID_ENDPOINTS };
 
 // Playback and reveal state, independent of raylib and A* implementation details.
 class Simulation {
 public:
     Simulation(const Grid& grid, Cell start, Cell goal) : search_(grid, start, goal) { syncSearch(); }
     void reset();
+    void replaceMap(const Grid& grid, Cell start, Cell goal, bool editing);
+    void enterEdit();
     void play();
     void pause();
     void step();

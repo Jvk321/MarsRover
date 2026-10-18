@@ -1,6 +1,6 @@
 # Mars Rover A* Navigation Simulator 2.5D
 
-Etap 5: iteracyjny A*, jazda rovera i plynna kamera 2.5D. Bez efektow srodowiskowych i dzwieku.
+Etap 6: generator terenu, edytor mapy, iteracyjny A*, rover i kamera 2.5D.
 
 ## Windows / MSYS2 UCRT64
 
@@ -27,16 +27,19 @@ Zamknij okno lub nacisnij Escape, aby zakonczyc.
 ## Kod
 
 - `src/astar.h`, `src/astar.cpp`: dynamiczny `Grid(width, height)` i `findPath` bez zaleznosci od raylib.
-- `src/main.cpp`: przykladowa mapa 24x14, przeszkody, start, cel i trasa; rozmiar mozna zmienic w konstruktorze `Grid`.
+- `src/main.cpp`: integracja paneli, edycji, symulacji i renderowania; domyslna mapa 20x20.
+- `src/terrain.h`, `src/terrain.cpp`: deterministyczny generator, weryfikacja przejezdnosci i operacje edycji.
+- `src/terrain_panel.h`, `src/terrain_panel.cpp`: formularz parametrow i presetow.
 - `src/simulation.h`, `src/simulation.cpp`: stan symulacji, odtwarzanie, zegar i odkrywanie trasy; bez raylib.
 - `src/rover.h`, `src/rover.cpp`: ciagla pozycja, obrot, przechyl i animacja kol; bez raylib.
 - `src/rover_renderer.h`, `src/rover_renderer.cpp`: izometryczny model z podstawowych ksztaltow raylib.
-- `src/world_camera.h`, `src/world_camera.cpp`: kamera, granice, reczne sterowanie i automatyczne kadrowanie; bez zaleznosci od A* i rovera.
+- `src/world_camera.h`, `src/world_camera.cpp`: kamera, granice, kadrowanie i konwersja klikniec na pola; bez wykonywania A* i logiki rovera.
 - `legacy/astar_original.cpp`: oryginalny program, zachowany bez zmian i niewlaczony do kompilacji.
 - `tests/astar_tests.cpp`: mapy prostokatne, granice, przeszkody, brak trasy i start rowny celowi.
 - `tests/simulation_tests.cpp`: automatyczne odkrywanie, pauza, STEP, RESET i mapa 33x25.
 - `tests/rover_tests.cpp`: interpolacja, cztery kierunki, skrety i niezaleznosc od kroku czasu.
 - `tests/camera_tests.cpp`: mapy 20x20 i 48x35, zoom, przesuwanie, sledzenie, pauza, reset i zblizenie po przyjezdzie.
+- `tests/terrain_tests.cpp`: wszystkie presety, seed, przejezdnosc, optymalna trasa A*, edycja i klikniecia po zoomie/przesunieciu.
 
 Zachowano ruch gora/dol/lewo/prawo, koszt 1, heurystyke euklidesowa,
 listy otwarta/zamknieta oraz wybor ostatniego elementu przy remisie f.
@@ -45,6 +48,39 @@ Wspolrzedne API: x = kolumna, y = wiersz od gory, oba od zera.
 Sciezka zawiera start i cel; pusty wektor oznacza brak trasy lub niepoprawne/zablokowane konce.
 Mapa nie jest modyfikowana przez wyszukiwanie. Dawna konwersja y od dolu i indeksy od 1 nie sa potrzebne.
 Poniewaz repozytorium nie zawieralo `grid.txt`, demonstracja tworzy mape w pamieci.
+
+## Generator i edytor
+
+NEW MAP otwiera formularz WIDTH, HEIGHT, OBSTACLE DENSITY i SEED.
+Kliknij pole i wpisz liczbe (Backspace usuwa, Tab zmienia pole).
+Obslugiwane sa dowolne rozmiary 2-512 w kazdej osi, gestosc 0-95% i seed uint32.
+Presety LAB 20x20, MEDIUM 30x30, EXPEDITION 50x50 i LARGE 80x60 zmieniaja rozmiar,
+zachowujac gestosc i seed. GENERATE TERRAIN zatwierdza formularz.
+Przycisk GENERATE nad mapa powtarza generowanie z ostatnimi zatwierdzonymi parametrami.
+
+Generator laczy eliptyczne skupiska skal, wieksze formacje, obrecze malych kraterow
+i pojedyncze glazy. Sprawdza polaczenie START-GOAL za pomoca BFS; jesli formacje
+odciely droge, odblokowuje waski korytarz i sprawdza polaczenie ponownie.
+Po tej naprawie rzeczywista gestosc moze byc nizsza od zadanej; panel pokazuje
+rzeczywista liczbe i procent przeszkod. Te same parametry i seed daja identyczna mape.
+START i GOAL sa zawsze przejezdne. Nowa mapa czysci symulacje, ustawia EDIT_MAP
+i wykonuje FIT TO MAP, zachowujac wybor AUTO CAMERA.
+
+EDIT MAP zatrzymuje symulacje i czysci stara trase. Narzedzia:
+
+- SET START (domyslne): LPM na pustym polu zmienia START.
+- SET GOAL: LPM na pustym polu zmienia GOAL.
+- ADD ROCK: LPM/przeciagniecie maluje przeszkody.
+- ERASER: LPM/przeciagniecie usuwa przeszkody.
+- PPM: przelacza wskazane pole. Przeciagniecie stosuje ten sam tryb malowania/wymazywania co pierwsze pole.
+
+Nie mozna ustawic przeszkody na START ani GOAL. Edycja dziala tylko w EDIT_MAP,
+przez aktualna odwrotna transformacje kamery. Kazda zmiana usuwa stara trase,
+OPEN/CLOSED z poprzedniego wyszukiwania, animacje i rover. Nie uruchamia A*.
+PLAY lub STEP rozpoczyna nowe wyszukiwanie; reczna edycja moze odciac droge,
+wtedy A* zakonczy sie stanem NO_PATH. CLEAR PATH czysci symulacje bez zmiany terenu.
+Panel MAP/OBSTACLES/SEED pozostaje nieruchomy. Seed opisuje wygenerowana baze,
+a reczne poprawki nie sa zapisywane w seedzie.
 
 ## Wizualizacja iteracyjna
 

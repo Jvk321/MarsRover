@@ -4,6 +4,14 @@
 Vector2 WorldCamera::project(double x,double y) {
     return {static_cast<float>((x-y)*32),static_cast<float>((x+y)*16)};
 }
+std::optional<Cell> WorldCamera::pick(Vector2 screen,int width,int height) const {
+    if (!CheckCollisionPointRec(screen,viewport_)) return std::nullopt;
+    Vector2 world=GetScreenToWorld2D(screen,camera_);
+    Cell cell{static_cast<int>(std::floor(world.x/64+world.y/32)),
+              static_cast<int>(std::floor(world.y/32-world.x/64))};
+    if (cell.x<0 || cell.y<0 || cell.x>=width || cell.y>=height) return std::nullopt;
+    return cell;
+}
 WorldCamera::WorldCamera(int width,int height,Rectangle viewport) {
     bounds_={-height*32.0f,0,(width+height)*32.0f,(width+height)*16.0f};
     pathCenter_={bounds_.x+bounds_.width/2,bounds_.height/2};
