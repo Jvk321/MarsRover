@@ -1,0 +1,18 @@
+{
+  "version": 3,
+  "configurePresets": [{
+    "name": "ucrt64",
+    "displayName": "MSYS2 UCRT64 Debug",
+    "generator": "Ninja",
+    "binaryDir": "${sourceDir}/build/ucrt64",
+    "cacheVariables": {
+      "CMAKE_BUILD_TYPE": "Debug",
+      "CMAKE_CXX_COMPILER": "C:/msys64/ucrt64/bin/g++.exe",
+      "CMAKE_MAKE_PROGRAM": "C:/msys64/ucrt64/bin/ninja.exe",
+      "CMAKE_PREFIX_PATH": "C:/msys64/ucrt64"
+    },
+    "environment": {"PATH": "C:/msys64/ucrt64/bin;$penv{PATH}"}
+  }],
+  "buildPresets": [{"name": "ucrt64", "configurePreset": "ucrt64"}],
+  "testPresets": [{"name": "ucrt64", "configurePreset": "ucrt64", "output": {"outputOnFailure": true}}]
+}
