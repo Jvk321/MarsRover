@@ -2,7 +2,7 @@
 #include "astar.h"
 #include "rover.h"
 
-enum class SimulationStatus { READY, SEARCHING, PATH_REVEAL, PATH_READY, DRIVING, MISSION_COMPLETE, NO_PATH, INVALID_ENDPOINTS };
+enum class SimulationStatus { READY, SEARCHING, PATH_REVEAL, PATH_READY, DRIVING, ARRIVAL, MISSION_COMPLETE, NO_PATH, INVALID_ENDPOINTS };
 
 // Playback and reveal state, independent of raylib and A* implementation details.
 class Simulation {
@@ -29,6 +29,7 @@ private:
     SimulationStatus status_ = SimulationStatus::READY;
     bool playing_ = false;
     double elapsed_ = 0, speed_ = 8;
+    double arrivalTime_ = 0;
     std::size_t revealed_ = 0;
     void advance();
     void syncSearch();

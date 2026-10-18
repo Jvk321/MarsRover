@@ -1,5 +1,6 @@
 #include "simulation.h"
 #include "rover_renderer.h"
+#include "world_camera.h"
 #include "raylib.h"
 #include <algorithm>
 #include <cmath>
@@ -12,6 +13,7 @@ const char* statusName(SimulationStatus status) {
     case SimulationStatus::PATH_REVEAL: return "REVEALING PATH...";
     case SimulationStatus::PATH_READY: return "PATH_READY";
     case SimulationStatus::DRIVING: return "DRIVING";
+    case SimulationStatus::ARRIVAL: return "CINEMATIC ARRIVAL";
     case SimulationStatus::MISSION_COMPLETE: return "MISSION COMPLETE";
     case SimulationStatus::NO_PATH: return "NO_PATH";
     case SimulationStatus::INVALID_ENDPOINTS: return "INVALID_ENDPOINTS";
@@ -37,10 +39,12 @@ int main() {
     float drivingSpeed = 1.5f;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(1280, 920, "Mars Rover A* Navigation Simulator 2.5D");
+    InitWindow(1280, 960, "Mars Rover A* Navigation Simulator 2.5D");
     if (!IsWindowReady()) return 1;
-    SetWindowMinSize(1000, 900);
+    SetWindowMinSize(1000, 940);
     SetTargetFPS(60);
+    WorldCamera worldCamera(grid.width(),grid.height(),{300,80,980,880});
+    std::size_t cameraPathSize = 0;
     while (!WindowShouldClose()) {
         BeginDrawing();
         ClearBackground({28,24,25,255});
@@ -105,19 +109,40 @@ int main() {
             DrawText(TextFormat("TRAVELLED: %.2f / %d",rover.travelled(),static_cast<int>(simulation.pathLength())),20,740,18,GOLD);
         } else DrawText("ROVER: waiting for path",20,680,18,LIGHTGRAY);
         DrawText("Space: play/pause\nN: step (drive: 1/60 s)\nR: reset\nPath length = segments",20,790,16,LIGHTGRAY);
-
-        const float sum = static_cast<float>(grid.width()) + grid.height();
-        const float availableWidth = GetScreenWidth()-340.0f;
-        const float availableHeight = GetScreenHeight()-130.0f;
-        const float tileWidth = std::min(availableWidth*2/sum,availableHeight*4/sum);
-        const float halfW = tileWidth/2, halfH = tileWidth/4;
-        const Vector2 origin{300 + (GetScreenWidth()-300)/2.0f - (grid.width()-grid.height())*halfW/2,
-                             90 + availableHeight/2 - sum*halfH/2};
+        if (button({20,880,252,38},worldCamera.automatic() ? "AUTO CAMERA: ON" : "AUTO CAMERA: OFF"))
+            worldCamera.setAuto(!worldCamera.automatic());
+        const Rectangle viewport{300,80,static_cast<float>(GetScreenWidth()-300),static_cast<float>(GetScreenHeight()-80)};
+        worldCamera.resize(viewport);
+        if (reset) { worldCamera.reset(); cameraPathSize = 0; }
+        if (search.path().size()!=cameraPathSize) {
+            std::vector<Vector2> points;
+            for (Cell c:search.path()) points.push_back(WorldCamera::project(c.x+0.5,c.y+0.5));
+            worldCamera.setPath(points); cameraPathSize=points.size();
+        }
+        CameraPhase phase=CameraPhase::WIDE;
+        if (simulation.status()==SimulationStatus::PATH_REVEAL || simulation.status()==SimulationStatus::PATH_READY)
+            phase=CameraPhase::REVEAL;
+        if (simulation.status()==SimulationStatus::DRIVING) phase=CameraPhase::FOLLOW;
+        if (simulation.status()==SimulationStatus::ARRIVAL) phase=CameraPhase::ARRIVAL;
+        if (simulation.status()==SimulationStatus::MISSION_COMPLETE) phase=CameraPhase::COMPLETE;
+        CameraInput cameraInput;
+        cameraInput.worldHovered=CheckCollisionPointRec(GetMousePosition(),viewport);
+        cameraInput.wheel=GetMouseWheelMove();
+        if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) cameraInput.drag=GetMouseDelta();
+        cameraInput.keys={static_cast<float>(IsKeyDown(KEY_D)-IsKeyDown(KEY_A)),
+                          static_cast<float>(IsKeyDown(KEY_S)-IsKeyDown(KEY_W))};
+        worldCamera.update(GetFrameTime(),phase,WorldCamera::project(rover.x()+0.5,rover.y()+0.5),rover.heading(),
+                           simulation.playing() || simulation.status()==SimulationStatus::READY,cameraInput);
+        constexpr float halfW=32,halfH=16;
+        const Vector2 origin{0,0};
         auto project = [=](int x,int y) {
             return Vector2{origin.x+(x-y)*halfW,origin.y+(x+y)*halfH};
         };
         DrawText("OPEN: blue | CLOSED: dark purple | CURRENT: bright outline",320,20,17,LIGHTGRAY);
         DrawText("S: start | G: goal | Gold: revealed path from start to goal",320,46,17,LIGHTGRAY);
+        DrawText("Wheel: zoom | MMB / WASD: pan (manual camera)",320,GetScreenHeight()-24,16,LIGHTGRAY);
+        BeginScissorMode(300,80,GetScreenWidth()-300,GetScreenHeight()-110);
+        BeginMode2D(worldCamera.view());
         for (int y=0;y<grid.height();++y) for (int x=0;x<grid.width();++x) {
             Cell cell{x,y};
             Color color = grid.blocked(cell) ? Color{65,49,45,255} : Color{161,94,64,255};
@@ -146,6 +171,8 @@ int main() {
             for (int i=0;i<4;++i) DrawLineEx(corners[i],corners[(i+1)%4],2+2*pulse,bright);
         }
         drawRover(simulation.rover(),origin,halfW,halfH);
+        EndMode2D();
+        EndScissorMode();
         EndDrawing();
     }
     CloseWindow();

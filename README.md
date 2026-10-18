@@ -1,6 +1,6 @@
 # Mars Rover A* Navigation Simulator 2.5D
 
-Etap 4: iteracyjny A*, odkrywanie trasy i jazda rovera 2.5D. Bez efektow srodowiskowych i dzwieku.
+Etap 5: iteracyjny A*, jazda rovera i plynna kamera 2.5D. Bez efektow srodowiskowych i dzwieku.
 
 ## Windows / MSYS2 UCRT64
 
@@ -31,10 +31,12 @@ Zamknij okno lub nacisnij Escape, aby zakonczyc.
 - `src/simulation.h`, `src/simulation.cpp`: stan symulacji, odtwarzanie, zegar i odkrywanie trasy; bez raylib.
 - `src/rover.h`, `src/rover.cpp`: ciagla pozycja, obrot, przechyl i animacja kol; bez raylib.
 - `src/rover_renderer.h`, `src/rover_renderer.cpp`: izometryczny model z podstawowych ksztaltow raylib.
+- `src/world_camera.h`, `src/world_camera.cpp`: kamera, granice, reczne sterowanie i automatyczne kadrowanie; bez zaleznosci od A* i rovera.
 - `legacy/astar_original.cpp`: oryginalny program, zachowany bez zmian i niewlaczony do kompilacji.
 - `tests/astar_tests.cpp`: mapy prostokatne, granice, przeszkody, brak trasy i start rowny celowi.
 - `tests/simulation_tests.cpp`: automatyczne odkrywanie, pauza, STEP, RESET i mapa 33x25.
 - `tests/rover_tests.cpp`: interpolacja, cztery kierunki, skrety i niezaleznosc od kroku czasu.
+- `tests/camera_tests.cpp`: mapy 20x20 i 48x35, zoom, przesuwanie, sledzenie, pauza, reset i zblizenie po przyjezdzie.
 
 Zachowano ruch gora/dol/lewo/prawo, koszt 1, heurystyke euklidesowa,
 listy otwarta/zamknieta oraz wybor ostatniego elementu przy remisie f.
@@ -96,5 +98,24 @@ numer segmentu (od 1), TRAVELLED (droga w jednostkach pol) i predkosc.
 STEP podczas DRIVING zatrzymuje odtwarzanie i przesuwa czas jazdy o 1/60 s.
 PAUSE zamraza pozycje, obrot, kola i przechyl. RESET usuwa rover i trase,
 wracajac do READY; obie wybrane predkosci pozostaja zachowane.
-Po dotarciu do GOAL stan zmienia sie na MISSION_COMPLETE i odtwarzanie sie zatrzymuje.
-START = GOAL konczy misje bez ruchu. Kamera pozostaje statyczna.
+Po dotarciu do GOAL rover zatrzymuje sie. Stan ARRIVAL trwa 2 sekundy odtwarzania,
+po czym nastepuje MISSION_COMPLETE i zatrzymanie odtwarzania.
+PAUSE zatrzymuje rowniez zegar przyjazdu; STEP przesuwa go o 1/60 s.
+START = GOAL przechodzi przez ARRIVAL bez jazdy.
+
+## Kamera 2.5D
+
+- Kolko myszy: plynny zoom, ograniczony od widoku calej mapy do zblizenia rovera.
+- Srodkowy przycisk myszy i przeciagniecie albo WASD: plynne przesuwanie.
+- Sterowanie reczne dziala z kursorem nad swiatem gry; przewijanie nad panelem nie zmienia kamery.
+- Reczne przesuniecie lub zoom automatycznie wylacza AUTO CAMERA. Przycisk w panelu wlacza go ponownie.
+- RESET natychmiast kadruje cala mape i zachowuje wybor AUTO CAMERA.
+
+Automat utrzymuje szeroki widok w READY/SEARCHING, delikatnie zbliza obszar
+trasy w PATH_REVEAL i podaza za roverem w DRIVING. Sledzenie korzysta z ciaglej
+pozycji, wykladniczego wygladzania i malego przesuniecia w kierunku jazdy.
+PAUSE zamraza automatyczna kamere; sterowanie reczne pozostaje dostepne.
+Podczas ARRIVAL kamera dodatkowo zbliza sie do rovera i celu.
+Przy wylaczonym AUTO CAMERA kadrowanie pozostaje reczne, takze podczas ARRIVAL.
+Punkt zainteresowania jest ograniczony do rombu mapy, aby przesuwanie nie zgubilo terenu.
+Panel, legenda i przyciski sa rysowane poza transformacja kamery; swiat jest przyciety do osobnego obszaru ekranu.

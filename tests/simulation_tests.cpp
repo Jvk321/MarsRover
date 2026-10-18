@@ -64,9 +64,15 @@ int main() {
     sim.update(10);
     check(sim.rover().heading()==angle && sim.rover().tilt()==tilt && sim.rover().wheelAngle()==turnWheel);
     sim.play();
-    for (int i=0;sim.status()!=SimulationStatus::MISSION_COMPLETE;++i) {
+    for (int i=0;sim.status()!=SimulationStatus::ARRIVAL;++i) {
         check(i<10000); sim.update(0.05);
     }
+    check(sim.rover().complete() && sim.playing());
+    const auto arrivalWheel=sim.rover().wheelAngle();
+    sim.update(0.5); sim.pause(); sim.update(100);
+    check(sim.status()==SimulationStatus::ARRIVAL && sim.rover().wheelAngle()==arrivalWheel);
+    sim.play(); sim.update(1.5);
+    check(sim.status()==SimulationStatus::MISSION_COMPLETE);
     check(!sim.playing() && sim.rover().x()==32 && sim.rover().y()==24);
     check(sim.rover().travelled()==56 && sim.rover().complete());
     sim.step(); sim.play(); sim.update(100);
@@ -99,6 +105,8 @@ int main() {
     check(trivial.status()==SimulationStatus::PATH_READY && trivial.pathLength()==0);
     check(trivial.visible({0,0}));
     trivial.play(); trivial.update(0.1);
+    check(trivial.status()==SimulationStatus::ARRIVAL);
+    trivial.update(2);
     check(trivial.status()==SimulationStatus::MISSION_COMPLETE && trivial.rover().complete());
     Grid blocked(3,1); blocked.setBlocked({1,0});
     Simulation noPath(blocked,{0,0},{2,0});
