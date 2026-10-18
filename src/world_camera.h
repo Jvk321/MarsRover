@@ -3,7 +3,7 @@
 #include <vector>
 #include "astar.h"
 
-enum class CameraPhase { WIDE, REVEAL, FOLLOW, ARRIVAL, COMPLETE };
+enum class CameraPhase { WIDE, REVEAL, FOLLOW, BLOCKED, REPLAN, ARRIVAL, COMPLETE };
 struct CameraInput {
     float wheel = 0;
     Vector2 drag{};
@@ -20,6 +20,7 @@ public:
     void setAuto(bool enabled) { automatic_ = enabled; }
     bool automatic() const { return automatic_; }
     void setPath(const std::vector<Vector2>& path);
+    void noticeRock(Vector2 rock) { rock_=rock; rockTime_=1.1f; }
     void update(float dt, CameraPhase phase, Vector2 rover, double heading,
                 bool autoRunning, const CameraInput& input = {});
     const Camera2D& view() const { return camera_; }
@@ -31,5 +32,7 @@ private:
     Vector2 desired_{}, pathCenter_{};
     float fit_ = 1, maxZoom_ = 4, desiredZoom_ = 1;
     bool automatic_ = true;
+    Vector2 rock_{};
+    float rockTime_=0;
     void clampTarget();
 };

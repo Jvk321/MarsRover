@@ -26,6 +26,7 @@ void WorldCamera::resize(Rectangle viewport) {
     camera_.zoom=std::clamp(camera_.zoom,fit_,maxZoom_);
 }
 void WorldCamera::reset() {
+    rockTime_=0;
     desired_={bounds_.x+bounds_.width/2,bounds_.height/2};
     camera_.target=desired_; camera_.zoom=desiredZoom_=fit_; camera_.rotation=0;
 }
@@ -66,6 +67,16 @@ void WorldCamera::update(float dt,CameraPhase phase,Vector2 rover,double heading
                 Vector2 look=project(std::cos(heading)*0.65,std::sin(heading)*0.65);
                 desired_.x+=look.x; desired_.y+=look.y;
             } else desiredZoom_*=1.3f;
+        }
+        if (phase==CameraPhase::BLOCKED || phase==CameraPhase::REPLAN) {
+            desired_=rover;
+            desiredZoom_=std::max(fit_*1.8f,1.2f);
+            if (rockTime_>0) {
+                float weight=0.75f*std::min(1.0f,rockTime_/0.6f);
+                desired_.x+=(rock_.x-desired_.x)*weight;
+                desired_.y+=(rock_.y-desired_.y)*weight;
+                rockTime_=std::max(0.0f,rockTime_-dt);
+            }
         }
     } else if (automatic_ && !autoRunning) return; // Pause freezes automatic tracking.
     desiredZoom_=std::clamp(desiredZoom_,fit_,maxZoom_);

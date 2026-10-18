@@ -52,6 +52,14 @@ int main() {
         check(std::abs(camera.view().target.x-follow.target.x)<1); // No tile snapping.
         for (int i=0;i<125;++i) camera.update(0.016f,CameraPhase::ARRIVAL,rover,0,true);
         check(camera.view().zoom>follow.zoom);
+        const auto beforeRock=camera.view().target;
+        const auto rock=WorldCamera::project(9.5,5.5);
+        camera.noticeRock(rock);
+        camera.update(0.016f,CameraPhase::BLOCKED,rover,0,true);
+        check(camera.view().target.x>beforeRock.x);
+        check(camera.view().target.x<rock.x); // Smooth interest shift, no camera teleport.
+        for (int i=0;i<250;++i) camera.update(0.016f,CameraPhase::REPLAN,rover,0,true);
+        check(std::abs(camera.view().target.x-rover.x)<0.1f);
         camera.setAuto(false);
         auto manual=camera.view();
         camera.update(0.1f,CameraPhase::FOLLOW,WorldCamera::project(30,20),0,true);

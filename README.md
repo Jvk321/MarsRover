@@ -1,6 +1,6 @@
 # Mars Rover A* Navigation Simulator 2.5D
 
-Etap 6: generator terenu, edytor mapy, iteracyjny A*, rover i kamera 2.5D.
+Etap 7: dynamiczne blokowanie trasy i ponowne planowanie A* podczas jazdy.
 
 ## Windows / MSYS2 UCRT64
 
@@ -40,6 +40,7 @@ Zamknij okno lub nacisnij Escape, aby zakonczyc.
 - `tests/rover_tests.cpp`: interpolacja, cztery kierunki, skrety i niezaleznosc od kroku czasu.
 - `tests/camera_tests.cpp`: mapy 20x20 i 48x35, zoom, przesuwanie, sledzenie, pauza, reset i zblizenie po przyjezdzie.
 - `tests/terrain_tests.cpp`: wszystkie presety, seed, przejezdnosc, optymalna trasa A*, edycja i klikniecia po zoomie/przesunieciu.
+- `tests/replanning_tests.cpp`: hamowanie, trzy kolejne blokady na mapie 80x60, nowe A*, kontynuacja, NO_ROUTE, PAUSE/STEP i RESET.
 
 Zachowano ruch gora/dol/lewo/prawo, koszt 1, heurystyke euklidesowa,
 listy otwarta/zamknieta oraz wybor ostatniego elementu przy remisie f.
@@ -155,3 +156,32 @@ Podczas ARRIVAL kamera dodatkowo zbliza sie do rovera i celu.
 Przy wylaczonym AUTO CAMERA kadrowanie pozostaje reczne, takze podczas ARRIVAL.
 Punkt zainteresowania jest ograniczony do rombu mapy, aby przesuwanie nie zgubilo terenu.
 Panel, legenda i przyciski sa rysowane poza transformacja kamery; swiat jest przyciety do osobnego obszaru ekranu.
+
+## DROP ROCK i ponowne planowanie
+
+Podczas DRIVING przycisk DROP ROCK losuje pole co najmniej cztery segmenty
+przed roverem, poza START i GOAL. Przy zbyt krotkiej pozostalej trasie jest
+nieaktywny. Nowy glaz staje sie przeszkoda zarowno dla A*, jak i edytora mapy.
+
+Przebieg: DRIVING -> ROUTE_BLOCKED -> RECALCULATING -> PATH_REVEAL -> PATH_READY -> DRIVING.
+W ROUTE_BLOCKED rover plynnie hamuje do srodka najblizszego bezpiecznego pola
+naprzod, bez cofania do START. Jesli akurat obracal sie w miejscu, pozostaje tam.
+Po zatrzymaniu czeka 0.8 s. RECALCULATING tworzy nowa instancje tego samego A*
+z pola zatrzymania do pierwotnego GOAL, na mapie ze wszystkimi dodanymi skalami.
+Stare OPEN/CLOSED/CURRENT znikaja, poprzednia trasa jest przygaszona,
+a nowa eksploracja i odkrywanie sa animowane jak za pierwszym razem.
+Nowa trasa zachowuje pozycje, kierunek i faze kol rovera przy wznowieniu jazdy.
+Bez alternatywy nastepuje NO_ROUTE z komunikatem NO ALTERNATIVE ROUTE.
+
+PLAY/PAUSE dzialaja we wszystkich aktywnych fazach. STEP w RECALCULATING wykonuje
+dokladnie jedna iteracje A*; podczas hamowania/pauzy blokady przesuwa czas o 1/60 s.
+Podczas PATH_REVEAL nadal odslania jeden segment. Mozna wielokrotnie uzyc DROP ROCK,
+gdy pojazd ponownie przejdzie do DRIVING. Panel pokazuje REPLANS, OLD PATH i NEW PATH;
+licznik wzrasta przy rozpoczeciu nowego wyszukiwania, dlugosci sa liczone w segmentach.
+NEW PATH pozostaje puste do znalezienia nowej trasy.
+
+AUTO CAMERA przez chwile spoglada w kierunku glazu, potem wraca do rovera
+i obserwuje przeliczanie, zachowujac wygladzanie. Sterowanie reczne i pauza
+pozostaja dostepne. RESET kasuje przebieg i telemetrie, wraca do pierwotnego
+START i kadruje mape; dodane przeszkody pozostaja w terenie. GENERATE odtwarza
+mape bazowa z seedu. Nie ma dodatkowego algorytmu planowania ani efektow czasteczkowych.

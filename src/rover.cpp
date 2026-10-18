@@ -8,12 +8,37 @@ void Rover::setSpeed(double speed) {
 void Rover::reset(const std::vector<Cell>& path) {
     path_ = path; segment_ = 0; progress_ = 0; wheelAngle_ = 0; tilt_ = 0;
     heading_ = 0; turnTime_ = 0; turning_ = false;
+    braking_=false; brakeTime_=0;
     x_ = path.empty() ? 0 : path.front().x;
     y_ = path.empty() ? 0 : path.front().y;
     if (path.size() > 1) {
         heading_ = std::atan2(path[1].y-path[0].y, path[1].x-path[0].x);
         prepareSegment();
     }
+}
+Cell Rover::stoppedCell() const { return {static_cast<int>(std::lround(x_)),static_cast<int>(std::lround(y_))}; }
+void Rover::followPath(const std::vector<Cell>& path) {
+    // New route starts at the center reached by braking. Preserve pose and wheel phase.
+    path_=path; segment_=0; progress_=0; turning_=false; braking_=false; tilt_=0;
+    if (path_.size()>1) prepareSegment();
+}
+void Rover::brake() {
+    brakeTime_=0; brakeProgress_=progress_;
+    braking_=available() && !complete() && !turning_;
+    brakeDuration_=braking_ ? 2*(1-progress_)/speed_ : 0;
+    // During a turn the vehicle is already stationary.
+    if (!braking_) { turning_=false; tilt_=0; }
+}
+void Rover::updateBrake(double seconds) {
+    if (!braking_ || !std::isfinite(seconds) || seconds<=0) return;
+    const double previous=progress_;
+    brakeTime_=std::min(brakeDuration_,brakeTime_+seconds);
+    const double u=brakeTime_/brakeDuration_;
+    progress_=brakeProgress_+(1-brakeProgress_)*(2*u-u*u);
+    const auto a=path_[segment_],b=path_[segment_+1];
+    x_=a.x+(b.x-a.x)*progress_; y_=a.y+(b.y-a.y)*progress_;
+    wheelAngle_+=(progress_-previous)/0.12;
+    if (u>=1) { ++segment_; progress_=0; braking_=false; turning_=false; tilt_=0; }
 }
 void Rover::prepareSegment() {
     if (complete()) return;

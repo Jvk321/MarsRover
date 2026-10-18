@@ -7,6 +7,11 @@ public:
     void reset(const std::vector<Cell>& path = {});
     void update(double seconds);
     void setSpeed(double speed);
+    void brake();
+    void updateBrake(double seconds);
+    bool braking() const { return braking_; }
+    Cell stoppedCell() const;
+    void followPath(const std::vector<Cell>& path);
     double speed() const { return speed_; }
     double x() const { return x_; }
     double y() const { return y_; }
@@ -25,5 +30,7 @@ private:
     double progress_ = 0, wheelAngle_ = 0, tilt_ = 0;
     double turnStart_ = 0, turnDelta_ = 0, turnTime_ = 0;
     bool turning_ = false;
+    bool braking_ = false;
+    double brakeTime_ = 0, brakeDuration_ = 0, brakeProgress_ = 0;
     void prepareSegment();
 };
