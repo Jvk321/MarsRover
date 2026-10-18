@@ -43,7 +43,7 @@ int main() {
     for(auto intensity:{StormIntensity::LIGHT,StormIntensity::MEDIUM,StormIntensity::HEAVY}) {
         storm.setIntensity(intensity);storm.setEnabled(true);
         for(int i=0;i<180;++i) {storm.update(1.0f/30);audio.update(1.0f/30,sim,storm);}
-        check(audio.wind()>AudioConfig::windGain && audio.windPitch()>1);
+        check(audio.wind()>AudioConfig::windGain && audio.windPitch()==1);
     }
     sim.reset();feedback.reset();audio.reset();
     check(feedback.missionTime()==0 && feedback.travelled()==0 && feedback.iterations()==0 && !feedback.terminal());

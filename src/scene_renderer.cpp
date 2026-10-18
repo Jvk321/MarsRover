@@ -208,10 +208,20 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
         pathLine(sim.oldPath(),sim.oldPath().size(),false);
         if(sim.status()!=SimulationStatus::ROUTE_BLOCKED) pathLine(search.path(),sim.revealed(),true);
     }
-    for(const auto& scan:effects.scans()) {
-        float t=scan.age/VisualConfig::scanLife;
-        ellipseRing(scan.center,8+t*VisualConfig::scanRadius,Fade(VisualConfig::cyan,(1-t)*0.5f*scan.strength),1.8f);
-        ellipseRing(scan.center,5+t*VisualConfig::scanRadius,Fade(SKYBLUE,(1-t)*0.12f),4);
+    const auto& sonar=effects.sonar();
+    if(sonar.strength()>0) {
+        const float radius=SonarConfig::sweepRadius;
+        for(float factor:{0.33f,0.66f,1.0f}) ellipseRing(focus,radius*factor,Fade(VisualConfig::cyan,SonarConfig::gridAlpha),0.65f);
+        for(int i=0;i<18;++i) {
+            float a=sonar.angle()-SonarConfig::trailRadians*(i+1)/18;
+            float b=sonar.angle()-SonarConfig::trailRadians*i/18;
+            Vector2 left{focus.x+std::cos(a)*radius,focus.y+std::sin(a)*radius*0.5f};
+            Vector2 right{focus.x+std::cos(b)*radius,focus.y+std::sin(b)*radius*0.5f};
+            triangle(focus,left,right,Fade(VisualConfig::cyan,SonarConfig::sweepAlpha*(1-i/18.0f)*0.12f));
+            DrawLineEx(focus,right,0.65f,Fade(VisualConfig::cyan,SonarConfig::sweepAlpha*std::exp(-i*0.35f)));
+        }
+        Vector2 end{focus.x+std::cos(sonar.angle())*radius,focus.y+std::sin(sonar.angle())*radius*0.5f};
+        DrawLineEx(focus,end,1.25f,Fade(Color{155,255,229,255},SonarConfig::sweepAlpha));
     }
     if(search.current() && (sim.status()==SimulationStatus::SEARCHING || sim.status()==SimulationStatus::RECALCULATING))
         diamond(search.current()->cell,0.05f,Fade(Color{220,255,255,255},0.65f+0.3f*std::sin(effects.time()*5)),true,2);
@@ -234,7 +244,7 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
         }
         if(!roverDrawn && depth>=roverDepth) {
             if(onScreen(project(static_cast<float>(rover.x()+0.5),static_cast<float>(rover.y()+0.5))))
-                drawRover(rover,{0,0},32,16,effects.time());
+                drawRover(rover,{0,0},32,16,sonar.angle());
             roverDrawn=true;
         }
     }

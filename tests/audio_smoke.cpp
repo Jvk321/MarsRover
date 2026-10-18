@@ -19,5 +19,5 @@ int main() {
     }
     if(std::abs(GetMasterVolume()-0.25f)>0.01f) return 1;
     audio.reset();if(audio.state().engine()!=0 || audio.anyPlaying()) return 1;
-    audio.shutdown();std::cout<<"Audio device, generated WAV loops, mute, master and reset passed\n";
+    audio.shutdown();std::cout<<"Audio device, continuous PCM streams, mute, master and reset passed\n";
 }

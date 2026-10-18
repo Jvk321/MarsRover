@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-void drawRover(const Rover& rover, Vector2 origin, float halfW, float halfH, float visualTime) {
+void drawRover(const Rover& rover, Vector2 origin, float halfW, float halfH, float scanAngle) {
     if (!rover.available()) return;
     const double c=std::cos(rover.heading()), s=std::sin(rover.heading());
     auto point = [&](double forward, double side, double height) {
@@ -52,7 +52,7 @@ void drawRover(const Rover& rover, Vector2 origin, float halfW, float halfH, flo
     DrawCircleV(point(0.20,0,0.85),0.8f,SKYBLUE);
     DrawLineEx(point(-0.28,0.12,0.3),point(-0.28,0.12,0.7),1.3f,LIGHTGRAY);
     auto antenna=point(-0.28,0.12,0.7);
-    float rotation=visualTime*VisualConfig::antennaSpeed;
+    float rotation=scanAngle;
     Vector2 end{antenna.x+std::cos(rotation)*5,antenna.y+std::sin(rotation)*2.5f};
     DrawLineEx({2*antenna.x-end.x,2*antenna.y-end.y},end,1.8f,Color{217,221,210,255});
     DrawCircleV(antenna,1.5f,ORANGE);

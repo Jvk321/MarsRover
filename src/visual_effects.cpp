@@ -4,8 +4,8 @@
 #include <cmath>
 float VisualEffects::randomFloat() { return (random_()%10000)/10000.0f; }
 void VisualEffects::reset(std::uint32_t seed) {
-    tracks_.clear();dust_.clear();scans_.clear();random_.seed(seed);
-    hadPose_=false;wasMoving_=false;time_=emission_=scanTime_=0;previous_=SimulationStatus::READY;
+    tracks_.clear();dust_.clear();sonar_.reset();random_.seed(seed);
+    hadPose_=false;wasMoving_=false;time_=emission_=0;previous_=SimulationStatus::READY;
     sandstorm_.reset(seed);
 }
 void VisualEffects::update(float dt,const Simulation& sim,Cell start) {
@@ -51,14 +51,7 @@ void VisualEffects::update(float dt,const Simulation& sim,Cell start) {
                              VisualConfig::dustLife*(0.7f+randomFloat()*0.6f),2+randomFloat()*3});
         }
     }
-    for(auto& scan:scans_) scan.age+=tick;
-    scans_.erase(std::remove_if(scans_.begin(),scans_.end(),[](const auto& s){return s.age>=VisualConfig::scanLife;}),scans_.end());
-    if(searching) {
-        scanTime_+=tick;
-        if(phaseChanged || scanTime_>=VisualConfig::scanInterval) {
-            if(scans_.size()<4) scans_.push_back({{(pose.x-pose.y)*32,(pose.x+pose.y)*16},0,phaseChanged?1.0f:0.65f});
-            scanTime_=0;
-        }
-    } else scanTime_=0;
+    float period=SonarConfig::period(sim.status());
+    if(period>0) sonar_.update(dt,period,sim.playing());else sonar_.inactive();
     wasMoving_=moved;lastPose_=pose;previous_=sim.status();
 }

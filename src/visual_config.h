@@ -14,8 +14,7 @@ constexpr int ambientCount=72;
 constexpr float trackSpacing=0.10f, trackHalfWidth=0.29f;
 constexpr float dustLife=1.8f, dustRate=32, turnDustRate=48;
 constexpr float windX=18, windY=3;
-constexpr float scanInterval=3.0f, scanLife=2.4f, scanRadius=145;
 constexpr float farParallax=0.018f, nearParallax=0.055f;
-constexpr float antennaSpeed=0.7f, beaconSignalSpeed=0.35f;
+constexpr float beaconSignalSpeed=0.35f;
 constexpr float detailZoomThreshold=0.45f;
 }

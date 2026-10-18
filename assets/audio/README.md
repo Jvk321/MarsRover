@@ -1,19 +1,23 @@
 # Audio replacements
 
-Optional WAV files loaded once at startup. Missing/invalid files use generated PCM placeholders.
+Optional one-shot WAV files loaded once at startup. Missing/invalid files use generated PCM placeholders.
+Wind and engine are now continuous procedural streams (no short-file looping).
 
 | File | Use |
 | --- | --- |
-| ambient_wind.wav | Loop: Mars ambience and sandstorm wind |
-| rover_engine.wav | Loop: quiet electric motor |
 | ui_click.wav | UI click |
-| lidar.wav | Scan ping |
+| lidar.wav | Sonar ping after a full antenna revolution (include any desired echo) |
 | path_found.wav | Route found, including replanning |
 | route_blocked.wav | Obstruction alert |
 | recalculating.wav | Technical replanning cue |
 | success.wav | Mission complete |
 | error.wav | No route / invalid endpoints |
 
-PCM WAV mono/stereo recommended; loop files should have seamless boundaries and conservative levels.
+PCM WAV mono/stereo recommended; keep conservative levels.
 No files are downloaded. Runtime path is supplied by ROVER_AUDIO_DIR in src/CMakeLists.txt.
-Defaults and gains: src/audio_system.h (AudioConfig); generated tones: src/audio_system.cpp.
+Wind/engine parameters: src/drive_audio_synth.h (DriveAudioConfig).
+Sonar timing, sweep and ping: src/sonar.h (SonarConfig).
+Other defaults: src/audio_system.h (AudioConfig); generated one-shots: src/audio_system.cpp.
+Legacy ambient_wind.wav / rover_engine.wav are intentionally not loaded, so a short old asset
+cannot bring back the audible repeat. To replace those streams later, swap the two synthesizer
+methods in drive_audio_synth.cpp; keep their state continuous across blocks.

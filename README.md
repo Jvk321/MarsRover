@@ -199,7 +199,7 @@ Scena jest rysowana proceduralnie, bez platnych ani pobieranych assetow:
 - Glazy, grupy skal, male klify i kratery z jasna gora, ciemnymi bokami i cieniem w stalym kierunku.
 - Jasny szesciokolowy rover z panelem slonecznym, zawieszeniem, masztem kamery, obracajaca sie antena i swiatlami.
 - Dwa ciemne slady kol oraz kurz powstajacy za pojazdem, szczegolnie przy ruszaniu i skretach.
-- Cyjanowe elipsy LIDAR co 3 s podczas SEARCHING/RECALCULATING, mocniejsze przy rozpoczeciu fazy. Przed jazda skan wychodzi od rovera zaparkowanego na START.
+- Obrotowa cyjanowa wiaska sonaru z krotkim ogonem i siatka izometryczna. Przed jazda skan wychodzi od rovera zaparkowanego na START.
 - Beacon GOAL z antena, swiatlem, hologramem i pierscieniami; mocniejszy po ukonczeniu misji.
 - Zlota projekcja trasy z poswiata i przeplywajacym swiatlem; widoczna jest tylko odkryta czesc. Stara trasa pozostaje przygaszona.
 - OPEN/CLOSED jako przezroczyste niebieskie/fioletowe nakladki; CURRENT z pulsujaca obwodka.
@@ -219,14 +219,14 @@ LIDAR jest wylacznie wizualizacja, nie zmienia wiedzy algorytmu o mapie.
 | `src/visual_config.h` | paleta, gridAlpha, openAlpha/closedAlpha, rockHeight/shadowAlpha, prog LOD, paralaksa |
 | `src/visual_config.h` | maxDust=384, maxTracks=16000, trackSpacing=0.10 pola, trackHalfWidth=0.29 |
 | `src/visual_config.h` | dustLife=1.8 s, dustRate=32/s, turnDustRate=48/s, windX/windY |
-| `src/visual_config.h` | scanInterval=3 s, scanLife=2.4 s, scanRadius=145 jednostek swiata |
-| `src/visual_config.h` | ambientCount=72, antennaSpeed, beaconSignalSpeed; parametry burzy sa w `src/sandstorm.h` |
+| `src/sonar.h` | okresy sonaru, promien, alpha i echo pingu |
+| `src/visual_config.h` | ambientCount=72, beaconSignalSpeed; parametry burzy sa w `src/sandstorm.h` |
 | `src/scene_renderer.cpp` | ksztalty terenu, skal, kraterow, beaconu, detal gruntu i grubosci projekcji |
 | `src/rover_renderer.cpp` | geometria korpusu, kol, masztu i swiatel |
 | `src/main.cpp`, `src/terrain_panel.cpp` | kolory i geometria paneli/przyciskow |
 
 Po osiagnieciu limitu sladow usuwane sa najstarsze. Emisja kurzu i liczba skanow
-sa ograniczone (maks. 4 aktywne pulsy); wiatr ma stala liczbe drobin.
+sa ograniczone; sonar uzywa jednego zegara bez puli fal, a wiatr ma stala liczbe drobin.
 Rysowanie detali i obiektow poza widokiem kamery jest pomijane; przy oddaleniu
 wylaczane sa drobne detale gruntu i czesc dodatkowych skalek.
 Maski A* sa przygotowywane raz na klatke w O(liczby pol + liczby wezlow),
@@ -322,21 +322,19 @@ Przy braku urzadzenia audio symulator dziala dalej i pokazuje informacje w mikse
 ### Dzwieki i assety
 
 `src/audio_system.h` / `AudioConfig` zawiera domyslne poziomy:
-MASTER 0.65, AMBIENT 0.32, SFX 0.55, engineGain 0.24, windGain 0.18 i scanInterval 3 s.
+MASTER 0.65, AMBIENT 0.32, SFX 0.55. Aktualne poziomy WIND/ENGINE: `DriveAudioConfig`.
 `AudioState` obserwuje stany i pozycje, nie modyfikuje symulacji.
-Sygnaly stanow sa emitowane przy przejsciu, a LIDAR maksymalnie co 3 s aktywnego skanowania.
+Sygnaly stanow sa emitowane przy przejsciu, a sonar po pelnym obrocie anteny.
 Silnik to stale zapetlony stream, wyciszany podczas pauzy/skretu/zatrzymania,
 z glosnoscia zaleznia od rzeczywistego ruchu. Nie restartuje sie na kaflach.
-Wiatr plynnie zmienia glosnosc i pitch z sila, poziomem i podmuchami sandstorm.
+Wiatr plynnie zmienia glosnosc z sila, poziomem i podmuchami sandstorm, bez podnoszenia pitchu.
 
 Opcjonalne pliki WAV w `assets/audio/` sa ladowane raz przy starcie:
 
 | Plik | Zdarzenie |
 | --- | --- |
-| `ambient_wind.wav` | petla ambientu i burzy |
-| `rover_engine.wav` | petla silnika |
 | `ui_click.wav` | klik interfejsu |
-| `lidar.wav` | ping skanera |
+| `lidar.wav` | ping sonaru po pelnym obrocie |
 | `path_found.wav` | znaleziona trasa, takze po replanningu |
 | `route_blocked.wav` | alarm blokady |
 | `recalculating.wav` | sygnal techniczny ponownego planowania |
@@ -344,7 +342,7 @@ Opcjonalne pliki WAV w `assets/audio/` sa ladowane raz przy starcie:
 | `error.wav` | NO_ROUTE / NO_PATH / bledne konce |
 
 Brakujace lub nieprawidlowe pliki sa zastepowane generowanymi tonami i szumem PCM.
-Petle sa dekodowane strumieniowo; fallback WAV pozostaje w pamieci do zamkniecia streamu.
+Wiatr i silnik sa ciaglymi generatorami PCM, bez zapetlonych krotkich plikow.
 Nie ma pobierania assetow ani ladowania dzwiekow w kazdej klatce.
 Geometria tonow, czestotliwosci i dlugosci: `src/audio_system.cpp`.
 Sciezka assetow: definicja `ROVER_AUDIO_DIR` w `src/CMakeLists.txt`.
@@ -389,3 +387,44 @@ MASTER, pauze i zatrzymanie wszystkich zasobow przy RESET.
 .\build\ucrt64\audio_smoke.exe
 .\build\ucrt64\visual_smoke.exe build/visual-qa
 ```
+
+## Audio 9.1 / antena sonarowa
+
+WIND jest cichym, niskopasmowym ambientem: niezalezny rumble, podwojnie filtrowany
+szum powietrza i powolna nieregularna modulacja. Generator zachowuje filtry,
+generator losowy i czas miedzy buforami; nie ma poczatku/konca ani petli 2-3 s.
+Burza zwieksza poziom lagodnie, bez pisku i bez zmiany wysokosci szumu.
+ENGINE laczy niski hum elektryczny, lekki whirr i sladowe serwo.
+Glosnosc oraz pitch sa wygladzane i zaleza od rzeczywistej predkosci;
+przy skrecie zostaje bardzo ciche serwo. Stream nie jest restartowany na kaflach.
+
+Antena i wiaska uzywaja tego samego zegara `SonarClock` w obserwatorze wizualnym
+i audio. Pelny obrot wywoluje dokladnie jeden ping 780 Hz z dwoma cichymi echami.
+SEARCHING: 3.4 s/obrot, RECALCULATING: 2.7 s/obrot i pitch pingu 1.08,
+DRIVING: 7.2 s/obrot. PAUSE zamraza obrot; MISSION_COMPLETE wylacza aktywny scan.
+Zamiast rozchodzacej sie fali jest cienka cyjanowa wiaska, krotki sektor ogona
+i subtelne izometryczne okregi odniesienia. Logika misji, UI i pozostale efekty sa bez zmian.
+
+| Parametr | Miejsce i wartosc |
+| --- | --- |
+| wind volume | `src/drive_audio_synth.h`: `windVolume=0.075` |
+| wind gust volume | `windGustVolume=0.035`, `stormWindLight=0.022`, `stormWindMedium=0.050`, `stormWindHeavy=0.095` |
+| engine volume | `engineVolume=0.28`, `servoVolume=0.024` |
+| engine pitch range | `enginePitchMin=0.94`, `enginePitchMax=1.10` |
+| sonar rotation speed / ping interval | `src/sonar.h`: `searchPeriod=3.4`, `replanPeriod=2.7`, `drivePeriod=7.2`; predkosc = 360 stopni / okres |
+| sonar ping volume | `pingVolume=0.58` wzgledem suwaka SFX |
+| sonar sweep alpha | `sweepAlpha=0.55`, `gridAlpha=0.075`, `trailRadians=0.22` |
+| sonar sweep radius | `sweepRadius=115` jednostek swiata |
+| sonar ping charakter | `pingFrequency=780`, `pingDecay=0.105`, `echoDelay=0.105`, `echoGain=0.19` |
+
+Hierarchia miksu: alerty > sonar/PATH FOUND > naped > ambient.
+Wind/engine nie korzystaja juz z krotkich `ambient_wind.wav` / `rover_engine.wav`.
+Pliki jednorazowych sygnalow w `assets/audio/` nadal sa obslugiwane.
+Nie ma alokacji w generatorach ani tworzenia streamow w petli renderowania.
+
+Test `wind_engine_sonar` generuje 35 s wiatru, sprawdza korelacje z opoznieniem 3 s,
+ciaglosc 185 s silnika i synchronizacje wiaski/pingow. Zapisuje odsluchowy WAV
+`build/audio-qa/wind-35s.wav` (zrodlo przed gainem miksera).
+`audio_endurance.exe` sprawdza 240 s rzeczywistego odtwarzania: 35 s ambientu,
+ponad 3 min streamu napedu, mute, pauze, wszystkie poziomy burzy i RESET.
+Liczniki `engineStarts` / `windStarts` potwierdzaja brak restartowania streamow.
