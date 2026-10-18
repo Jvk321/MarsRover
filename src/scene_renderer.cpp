@@ -190,7 +190,7 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
         for(std::size_t i=0;i<path.size() && i<=segments;++i) {
             auto p=project(path[i].x+0.5f,path[i].y+0.5f);
             if(!onScreen(p)) continue;
-            Color color=fogged(active?VisualConfig::gold:Color{121,101,77,110},storm.haze(p,focus,view.zoom));
+            Color color=fogged(active?VisualConfig::gold:Color{121,101,77,110},storm.haze(p,focus,view.zoom)*(active?0.45f:1));
             diamond(path[i],0.20f,Fade(color,active?0.10f:0.06f));
             if(i) {
                 auto a=project(path[i-1].x+0.5f,path[i-1].y+0.5f);
@@ -218,7 +218,7 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
     if(sim.status()==SimulationStatus::PATH_REVEAL && !search.path().empty())
         diamond(search.path()[sim.revealed()],0.15f,Fade(VisualConfig::gold,0.65f+0.3f*std::sin(effects.time()*6)),true,2);
     diamond(terrain.start,0.2f,Fade(VisualConfig::cyan,0.5f),true,1);
-    storm.drawGround(grid.width(),grid.height(),visible);
+    storm.drawGround(grid.width(),grid.height(),visible,focus,view.zoom);
     Rover parked;
     if(!sim.rover().available()) parked.reset({terrain.start});
     const Rover& rover=sim.rover().available()?sim.rover():parked;
@@ -247,10 +247,10 @@ void SceneRenderer::draw(const Terrain& terrain,const Simulation& sim,const Worl
         // Light scattering is visual only; neither rover model nor beacon behavior is changed.
         Vector2 front=project(static_cast<float>(rover.x()+0.5+std::cos(rover.heading())*0.35),
                               static_cast<float>(rover.y()+0.5+std::sin(rover.heading())*0.35));
-        DrawCircleGradient({front.x,front.y-8},13,Fade(Color{255,242,204,255},storm.strength()*0.24f),Fade(WHITE,0));
+        DrawCircleGradient({front.x,front.y-8},13,Fade(Color{255,242,204,255},storm.strength()*StormConfig::roverLightOpacity),Fade(WHITE,0));
         Vector2 beaconPosition=project(terrain.goal.x+0.5f,terrain.goal.y+0.5f);
         if(onScreen(beaconPosition)) DrawCircleGradient({beaconPosition.x,beaconPosition.y-34},20,
-            Fade(VisualConfig::gold,storm.strength()*0.22f),Fade(VisualConfig::gold,0));
+            Fade(VisualConfig::gold,storm.strength()*StormConfig::beaconLightOpacity),Fade(VisualConfig::gold,0));
     }
     EndMode2D();
     // Constant-size screen-space motes, clipped to world, with bounded draw count.

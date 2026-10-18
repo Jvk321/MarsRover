@@ -265,16 +265,16 @@ Wszystkie parametry burzy: `src/sandstorm.h`, przestrzen nazw `StormConfig`:
 
 | Parametr | LIGHT | MEDIUM | HEAVY |
 | --- | --- | --- | --- |
-| nearCount / nearGust | 16 / 28 | 40 / 66 | 72 / 112 |
+| nearCount / nearGust | 18 / 28 | 48 / 66 | 80 / 112 |
 | midCount / midGust | 90 / 145 | 220 / 330 | 390 / 512 |
-| groundCount / groundGust | 10 / 16 | 22 / 34 | 36 / 56 |
-| haze | 0.20 | 0.43 | 0.70 |
+| groundCount / groundGust | 12 / 16 | 26 / 34 | 40 / 56 |
+| haze | 0.16 | 0.34 | 0.72 |
 | speed | 0.65 | 1.0 | 1.35 |
 
 - Particle count i storm intensity: `profiles`, wyzej limity podstawowe / podmuch.
 - Wind direction: `windDirection = {1.0, 0.32}` (prawo i w dol sceny).
-- Gust frequency: `gustInterval = 5.5 s`; `gustDuration = 1.15 s`, `gustSpeedBoost = 1.3`.
-- Haze strength: `profiles[].haze`, neutralny `hazeColor`, `clearRadius = 105 px`, `fadeDistance = 560 px`.
+- Gust frequency: `gustInterval = 5.5 s`; `gustDuration = 1.35 s`, `gustSpeedBoost = 2.0` (do 3x predkosci).
+- Haze strength: `profiles[].haze`, neutralny `hazeColor`, `clearRadius = 155 px`, `fadeDistance = 620 px`.
 - Transition: `transitionSeconds = 2.5`.
 - Predkosci warstw: `nearSpeed`, `midSpeed`, `groundSpeed`.
 
@@ -283,3 +283,30 @@ Aktualizacja i rysowanie burzy nie alokuja pamieci; liczba aktywnych czastek
 zalezy od profilu, narastania i podmuchu. Ground dust jest przycinany do mapy i widoku.
 Test `layered_sandstorm` sprawdza przejscia, podmuchy, limity i strefe czytelnosci.
 `visual_smoke` zapisuje tez podglady `04a-light.png`, `04b-medium.png`, `04c-heavy.png` na mapie 80x60.
+
+### Sandstorm final polish 8.2
+
+Domyslnie OFF, wybrany poziom MEDIUM. Wylaczenie i ponowne wlaczenie zachowuje
+poziom wybrany przez uzytkownika. Kamery i logiki symulacji nie zmieniono.
+
+Haze jest neutralny kolorystycznie i nierownomierny: lagodne przemieszczajace sie
+platy zalezne od wspolrzednych swiata, odleglosci oraz polozenia przed/za roverem.
+Bliski plan ma strefe bez haze, srodkowy jest lekko zapylony, daleki najmocniej.
+Aktywna trasa ma zmniejszone tlumienie, a dalekie tlo w HEAVY mocniejszy haze.
+Polowa puli ground dust jest rozmieszczona w poblizu rovera; smugi sa pierzaste
+i rysowane pod obiektami. Foreground ma dluzsze/szersze smugi i szybszy ruch.
+Podmuch ma szybkie gladkie narastanie i dluzsze wygaszanie, bez naglych skokow.
+Poswiate swiatel zwiekszono subtelnie, bez zmiany ich promienia.
+
+W `src/sandstorm.h` / `StormConfig`:
+
+| Efekt | Parametry |
+| --- | --- |
+| Foreground dust | `nearSpeed=1.65`, `foregroundLength=24`, `foregroundSpeedLength=26`, `foregroundGustLength=42`, `foregroundOpacity=0.32`, `foregroundWidth=1.05`, liczby near w `profiles` |
+| Ground dust | `groundSpeed=0.014`, `groundOpacity=0.20`, `groundLength=34`, `groundGustLength=48`, `localGroundRadius=300 px`, liczby ground w `profiles` |
+| Gust strength | `gustSpeedBoost=2.0`, `gustInterval=5.5 s`, `gustDuration=1.35 s`, limity `nearGust/midGust/groundGust` |
+| Haze | `profiles[].haze`, `hazeColor`, `hazePatchScale=0.006`, `hazePatchDrift=0.17`, `hazePatchMinimum=0.38`, `farHazeBoost=1.25` |
+| Visibility falloff | `clearRadius=155 px`, `fadeDistance=620 px`, `nearHazeFactor=0.16`; mniejsza wartosc near zachowuje bardziej czytelny bliski plan |
+| Swiatla | `roverLightOpacity=0.28`, `beaconLightOpacity=0.27` |
+
+Pule i ich limity pozostaja stale. W aktualizacji/rysowaniu burzy nie ma nowych alokacji.

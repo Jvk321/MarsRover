@@ -33,7 +33,9 @@ void Sandstorm::update(float dt) {
     if(strength_==0) { time_=0;gust_=0;return; }
     time_+=dt;
     float phase=std::fmod(time_,StormConfig::gustInterval);
-    gust_=phase<StormConfig::gustDuration ? std::pow(std::sin(pi*phase/StormConfig::gustDuration),2.0f):0;
+    // Quick but smooth attack, longer decay. Density and speed share this envelope.
+    float u=phase/StormConfig::gustDuration;
+    gust_=u<1 ? smooth(u/0.24f)*(1-smooth((u-0.24f)/0.76f)):0;
     float speed=profile().speed*(1+gust_*StormConfig::gustSpeedBoost);
     auto move=[&](auto& pool,float rate) {
         for(auto& p:pool) {
@@ -55,29 +57,39 @@ float Sandstorm::haze(Vector2 world,Vector2 focus,float zoom) const {
     float dx=(world.x-focus.x)*zoom,dy=(world.y-focus.y)*zoom;
     float distance=std::hypot(dx,dy);
     float depth=smooth((distance-StormConfig::clearRadius)/StormConfig::fadeDistance);
-    float farSide=smooth((-dy+100)/450);
-    return strength_*profile().haze*depth*(0.5f+0.5f*farSide)*(1+gust_*0.12f);
+    float farSide=smooth((-dy+70)/500);
+    float patch=0.5f+0.5f*std::sin(world.x*StormConfig::hazePatchScale-time_*StormConfig::hazePatchDrift)
+                            *std::cos(world.y*StormConfig::hazePatchScale*0.73f-time_*0.09f);
+    patch=StormConfig::hazePatchMinimum+(1-StormConfig::hazePatchMinimum)*smooth(patch);
+    float directional=StormConfig::nearHazeFactor+(1-StormConfig::nearHazeFactor)*farSide;
+    return std::clamp(strength_*profile().haze*depth*directional*patch*(1+gust_*0.16f),0.0f,0.92f);
 }
 float Sandstorm::backgroundHaze(int layer) const {
-    return strength_*profile().haze*(layer==0?0.95f:0.60f);
+    return std::min(0.94f,strength_*profile().haze*(layer==0?StormConfig::farHazeBoost:0.48f));
 }
-void Sandstorm::drawGround(int width,int height,Rectangle bounds) const {
+void Sandstorm::drawGround(int width,int height,Rectangle bounds,Vector2 focus,float zoom) const {
     for(int i=0;i<groundCount();++i) {
         const auto& p=ground_[i];
         // Wrap in a projected square: both drift and streak share the screen-space wind angle.
         const float extent=(width+height)*32.0f;
         Vector2 center{p.position.x*extent-height*32.0f,p.position.y*extent*0.5f};
+        if(i%2==0) {
+            float radius=StormConfig::localGroundRadius/std::max(0.05f,zoom);
+            center={focus.x+(p.position.x-0.5f)*radius*2,focus.y+(p.position.y-0.5f)*radius};
+        }
         float gx=center.x/64+center.y/32,gy=center.y/32-center.x/64;
         if(gx<0 || gy<0 || gx>=width || gy>=height) continue;
         if(!CheckCollisionPointRec(center,bounds)) continue;
         float envelope=std::pow(std::sin(p.position.x*pi),2.0f);
-        float length=18+p.size*22+gust_*25;
+        float length=StormConfig::groundLength+p.size*24+gust_*StormConfig::groundGustLength;
         Vector2 wind=StormConfig::windDirection;
         // Projected world-space streaks lie on the same plane as the isometric grid.
-        for(int band=0;band<3;++band) {
-            Vector2 a{center.x-band*3,center.y+band*2};
-            Vector2 b{a.x+wind.x*length,a.y+wind.y*length};
-            DrawLineEx(a,b,1.0f+band*0.6f,Fade(Color{199,167,133,255},strength_*p.alpha*envelope*0.08f));
+        for(int band=0;band<3;++band) for(int segment=0;segment<6;++segment) {
+            float t=segment/6.0f;
+            Vector2 a{center.x-band*3+wind.x*length*t,center.y+band*2+wind.y*length*t};
+            Vector2 b{a.x+wind.x*length/6,a.y+wind.y*length/6};
+            float feather=std::sin((t+1.0f/12)*pi);
+            DrawLineEx(a,b,2.4f+band*0.8f,Fade(Color{208,185,150,255},strength_*p.alpha*envelope*feather*StormConfig::groundOpacity));
         }
     }
 }
@@ -87,13 +99,13 @@ void Sandstorm::drawAir(Rectangle v) const {
         for(int i=0;i<count;++i) {
             const auto& p=pool[i];
             float edge=std::min({p.position.x,p.position.y,1-p.position.x,1-p.position.y})*18;
-            float opacity=std::clamp(edge,0.0f,1.0f)*strength_*p.alpha*(near?0.25f:0.15f);
+            float opacity=std::clamp(edge,0.0f,1.0f)*strength_*p.alpha*(near?StormConfig::foregroundOpacity:0.15f);
             float wave=near?0:std::sin(time_*1.4f+p.phase)*5;
             Vector2 head{v.x+p.position.x*v.width,v.y+p.position.y*v.height+wave};
-            float length=near ? 10+p.speed*15+gust_*28 : 2+p.size*1.5f;
+            float length=near ? StormConfig::foregroundLength+p.speed*StormConfig::foregroundSpeedLength+gust_*StormConfig::foregroundGustLength : 2+p.size*1.5f;
             Vector2 tail{head.x-length*StormConfig::windDirection.x,head.y-length*StormConfig::windDirection.y};
-            if(near) DrawLineEx(tail,head,p.size+1.2f,Fade(Color{200,180,154,255},opacity*0.2f));
-            DrawLineEx(tail,head,near?p.size*0.7f:0.75f,Fade(Color{220,201,171,255},opacity));
+            if(near) DrawLineEx(tail,head,p.size+2.8f,Fade(Color{200,190,169,255},opacity*0.15f));
+            DrawLineEx(tail,head,near?p.size*StormConfig::foregroundWidth:0.75f,Fade(Color{220,209,184,255},opacity));
         }
     };
     draw(mid_,midCount(),false);draw(near_,nearCount(),true);
@@ -101,8 +113,8 @@ void Sandstorm::drawAir(Rectangle v) const {
     if(gust_>0.05f) for(int i=0;i<4;++i) {
         const auto& p=near_[i];
         Vector2 a{v.x+p.position.x*v.width,v.y+p.position.y*v.height};
-        Vector2 b{a.x+180,a.y+180*StormConfig::windDirection.y};
+        Vector2 b{a.x+240,a.y+240*StormConfig::windDirection.y};
         for(int layer=3;layer>=1;--layer)
-            DrawLineEx(a,b,static_cast<float>(layer*8),Fade(Color{186,163,139,255},gust_*strength_*0.012f));
+            DrawLineEx(a,b,static_cast<float>(layer*8),Fade(Color{192,183,161,255},gust_*strength_*0.022f));
     }
 }

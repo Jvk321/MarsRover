@@ -4,6 +4,8 @@
 #include <iostream>
 void check(bool value) { if(!value) {std::cerr<<"Sandstorm test failed\n";std::exit(1);} }
 int main() {
+    Sandstorm defaults;
+    check(!defaults.enabled() && defaults.intensity()==StormIntensity::MEDIUM);
     for(int level=0;level<3;++level) {
         Sandstorm storm;storm.setIntensity(static_cast<StormIntensity>(level));storm.reset(47);
         storm.setEnabled(true);storm.update(0.1f);
@@ -20,7 +22,9 @@ int main() {
         }
         check(largestGust>0.95f && maxCount>minCount);
         check(storm.haze({0,0},{0,0},2)==0);
-        check(storm.haze({0,-1000},{0,0},2)>0.1f);
+        check(storm.haze({0,-1000},{0,0},2)>0.03f);
+        check(storm.haze({0,-1000},{0,0},2)>storm.haze({0,1000},{0,0},2));
+        check(std::abs(storm.haze({-500,-700},{0,0},2)-storm.haze({500,-700},{0,0},2))>0.001f);
         check(storm.backgroundHaze(0)>storm.backgroundHaze(1));
         storm.setEnabled(false);storm.update(0.1f);check(storm.strength()>0.99f);
         for(int i=0;i<26;++i) storm.update(0.1f);
