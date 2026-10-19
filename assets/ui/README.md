@@ -1,6 +1,7 @@
 # Zasoby interfejsu
 
-Interfejs używa kształtów i domyślnej czcionki raylib. Nie wymaga zewnętrznych plików.
-Wspólne przyciski są w `src/ui_controls.h`, a panele w `main.cpp`,
-`terrain_panel.cpp` i `mission_feedback.cpp`. Tutaj można później umieścić
-opcjonalne ikony lub czcionki, zachowując proceduralny wariant zastępczy.
+Opcjonalny font: `Inter-Regular.ttf`.
+
+Aplikacja ładuje go raz z tego katalogu. Jeśli pliku nie ma, na Windows korzysta z zainstalowanego `C:/Windows/Fonts/segoeui.ttf`. Font systemowy nie jest kopiowany do projektu. Ostatnim fallbackiem jest czcionka raylib.
+
+Ikony, przyciski i szkło są proceduralne. Parametry i struktura renderowania znajdują się w `UI_GLASS.md` w katalogu głównym projektu.

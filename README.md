@@ -1,6 +1,6 @@
 ﻿# Mars Rover A* Navigation Simulator 2.5D
 
-Projekt studencki w C++17 i raylib. Symulator pokazuje krok po kroku wyszukiwanie A*, odkrywanie trasy, ruch łazika oraz ponowne planowanie po zablokowaniu drogi. Izometryczna grafika 2.5D jest rysowana proceduralnie.
+Projekt studencki w C++17 i raylib. Symulator pokazuje krok po kroku wyszukiwanie A*, odkrywanie trasy, ruch łazika oraz ponowne planowanie po zablokowaniu drogi. Izometryczna grafika 2.5D jest rysowana proceduralnie. Aktualny wygląd obejmuje skalne płaskowyże, bazę badawczą, sześciokołowy rover, holograficzną nawigację i minimapę.
 
 Celem projektu jest pokazanie związku między stanem algorytmu, mapą przeszkód i ruchem pojazdu. Efekty graficzne i dźwięk są oddzielone od pathfindingu.
 
@@ -118,6 +118,9 @@ Nie mieszaj różnych generatorów i kompilatorów w tym samym katalogu build. M
 - `assets/textures/`, `assets/ui/` — miejsca na przyszłe grafiki; obecnie świat i UI są proceduralne, bez wymaganych PNG.
 - `src/presentation.h` — rozmiary, seedy i prędkości presetów demonstracyjnych.
 - `src/visual_config.h` — teren, kurz, ślady, beacon i ogólne parametry wizualne.
+- [VISUAL_MATCH.md](VISUAL_MATCH.md) — opis grafiki, depth sorting, parametry oświetlenia/glow, LOD i miejsca pod przyszłe sprite'y PNG.
+- [ROVER_3D.md](ROVER_3D.md) — model 3D rovera, ortograficzna integracja ze światem 2.5D, koła, zawieszenie, antena, parametry i opcjonalny korpus GLB/GLTF.
+- [UI_GLASS.md](UI_GLASS.md) — responsywny prawy HUD, lokalny blur, jakość LOW/HIGH, typografia i testy interfejsu.
 - `src/sandstorm.h` / `StormConfig` — pule pyłu, wiatr, podmuchy, haze i przejścia. Domyślnie OFF, po włączeniu MEDIUM.
 - `src/sonar.h` / `SonarConfig` — obroty anteny, okres pingu i wygląd wiązki.
 - `src/audio_system.h` / `AudioConfig` — domyślny miks; `src/drive_audio_synth.h` / `DriveAudioConfig` — wiatr i silnik.

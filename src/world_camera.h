@@ -4,6 +4,9 @@
 #include "astar.h"
 
 enum class CameraPhase { WIDE, REVEAL, FOLLOW, BLOCKED, REPLAN, ARRIVAL, COMPLETE };
+namespace CameraFraming {
+constexpr float fitPadding=80,skirtSpace=110,followZoom=2.7f,lookAhead=1.15f,screenBias=110;
+}
 struct CameraInput {
     float wheel = 0;
     Vector2 drag{};
@@ -29,7 +32,7 @@ public:
 private:
     Camera2D camera_{};
     Rectangle viewport_{}, bounds_{};
-    Vector2 desired_{}, pathCenter_{};
+    Vector2 desired_{},pathCenter_{},wideCenter_{};
     float fit_ = 1, maxZoom_ = 4, desiredZoom_ = 1;
     bool automatic_ = true;
     Vector2 rock_{};

@@ -1,5 +1,6 @@
 #pragma once
 #include "astar.h"
+#include "rover_geometry.h"
 
 // Continuous pose in grid coordinates, independent of rendering.
 class Rover {
@@ -17,6 +18,9 @@ public:
     double y() const { return y_; }
     double heading() const { return heading_; } // radians: +x=0, +y=pi/2
     double wheelAngle() const { return wheelAngle_; }
+    // A positive body yaw moves the +side contact backwards along the wheel plane.
+    double wheelAngle(double side) const { return wheelAngle_-side*wheelYaw_/RoverGeometry::wheelRadius; }
+    double steering() const { return steering_; }
     double tilt() const { return tilt_; }
     double travelled() const { return segment_ + progress_; }
     std::size_t segment() const { return segment_; } // completed segments
@@ -28,6 +32,7 @@ private:
     std::size_t segment_ = 0;
     double x_ = 0, y_ = 0, heading_ = 0, speed_ = 1.5;
     double progress_ = 0, wheelAngle_ = 0, tilt_ = 0;
+    double wheelYaw_=0, steering_=0;
     double turnStart_ = 0, turnDelta_ = 0, turnTime_ = 0;
     bool turning_ = false;
     bool braking_ = false;

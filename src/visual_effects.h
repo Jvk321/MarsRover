@@ -3,6 +3,7 @@
 #include "raylib.h"
 #include "sandstorm.h"
 #include "sonar.h"
+#include "rover_3d_pose.h"
 #include <deque>
 #include <random>
 struct TrackMark { Vector2 from,to; float heading; };
@@ -19,14 +20,20 @@ public:
     const std::deque<TrackMark>& tracks() const { return tracks_; }
     const std::vector<DustParticle>& dust() const { return dust_; }
     const SonarClock& sonar() const { return sonar_; }
+    Rover3D::Motion roverMotion() const {return roverMotion_;}
 private:
     std::deque<TrackMark> tracks_;
     std::vector<DustParticle> dust_;
     SonarClock sonar_;
+    Rover3D::Motion roverMotion_{};
+    float lastSpeed_=0;
+    bool wasBraking_=false;
     std::mt19937 random_{42};
     Sandstorm sandstorm_;
-    bool hadPose_=false,wasMoving_=false;
-    Vector2 lastPose_{},trackPose_{};
+    bool hadPose_=false,hadRover_=false,wasMoving_=false;
+    Vector2 lastPose_{},trackPose_[2]{};
+    float trackRemainder_[2]{},lastHeading_=0,lastSteering_=0;
+    unsigned dustSequence_=0;
     float time_=0,emission_=0;
     SimulationStatus previous_=SimulationStatus::READY;
     float randomFloat();

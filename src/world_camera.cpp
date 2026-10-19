@@ -14,20 +14,22 @@ std::optional<Cell> WorldCamera::pick(Vector2 screen,int width,int height) const
 }
 WorldCamera::WorldCamera(int width,int height,Rectangle viewport) {
     bounds_={-height*32.0f,0,(width+height)*32.0f,(width+height)*16.0f};
-    pathCenter_={bounds_.x+bounds_.width/2,bounds_.height/2};
+    wideCenter_={bounds_.x+bounds_.width/2,bounds_.height/2+std::min(CameraFraming::skirtSpace*0.4f,bounds_.height*0.25f)};
+    pathCenter_=wideCenter_;
     resize(viewport); reset();
 }
 void WorldCamera::resize(Rectangle viewport) {
     viewport_=viewport;
     camera_.offset={viewport.x+viewport.width/2,viewport.y+viewport.height/2};
-    fit_=std::max(0.001f,std::min((viewport.width-60)/bounds_.width,(viewport.height-60)/bounds_.height));
+    fit_=std::max(0.001f,std::min((viewport.width-CameraFraming::fitPadding)/bounds_.width,
+                               (viewport.height-CameraFraming::fitPadding)/(bounds_.height+CameraFraming::skirtSpace)));
     maxZoom_=std::max(fit_*4,4.0f);
     desiredZoom_=std::clamp(desiredZoom_,fit_,maxZoom_);
     camera_.zoom=std::clamp(camera_.zoom,fit_,maxZoom_);
 }
 void WorldCamera::reset() {
     rockTime_=0;
-    desired_={bounds_.x+bounds_.width/2,bounds_.height/2};
+    desired_=wideCenter_;
     camera_.target=desired_; camera_.zoom=desiredZoom_=fit_; camera_.rotation=0;
 }
 void WorldCamera::setPath(const std::vector<Vector2>& path) {
@@ -58,14 +60,15 @@ void WorldCamera::update(float dt,CameraPhase phase,Vector2 rover,double heading
     }
     if (automatic_ && autoRunning) {
         desiredZoom_=fit_;
-        desired_={bounds_.x+bounds_.width/2,bounds_.height/2};
+        desired_=wideCenter_;
         if (phase==CameraPhase::REVEAL) { desired_=pathCenter_; desiredZoom_=fit_*1.12f; }
         if (phase==CameraPhase::FOLLOW || phase==CameraPhase::ARRIVAL || phase==CameraPhase::COMPLETE) {
             desired_=rover;
-            desiredZoom_=std::max(fit_*2.5f,2.2f);
+            desiredZoom_=std::max(fit_*2.5f,CameraFraming::followZoom);
             if (phase==CameraPhase::FOLLOW) {
-                Vector2 look=project(std::cos(heading)*0.65,std::sin(heading)*0.65);
+                Vector2 look=project(std::cos(heading)*CameraFraming::lookAhead,std::sin(heading)*CameraFraming::lookAhead);
                 desired_.x+=look.x; desired_.y+=look.y;
+                desired_.y-=CameraFraming::screenBias/std::max(camera_.zoom,0.1f);
             } else desiredZoom_*=1.3f;
         }
         if (phase==CameraPhase::BLOCKED || phase==CameraPhase::REPLAN) {

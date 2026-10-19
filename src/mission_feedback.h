@@ -22,5 +22,7 @@ private:
     float statusAge_=100,overlayAge_=0;
     double missionTime_=0,searchTime_=0,travelled_=0,lastX_=0,lastY_=0;
     bool hadPose_=false;
+    bool wasModal_=false;
+    float modalAge_=0;
     std::size_t iterations_=0,lastIterations_=0;
 };

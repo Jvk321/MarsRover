@@ -10,10 +10,12 @@
 | Symulacja | `simulation.h/.cpp`: `Simulation` | Stany, odtwarzanie, reveal, DROP ROCK, ponowna inicjalizacja tego samego A* |
 | Łazik | `rover.h/.cpp`: `Rover` | Pozycja ciągła, obrót, przechył, hamowanie i segment trasy |
 | Kamera | `world_camera.h/.cpp`: `WorldCamera` | Projekcja izometryczna, screen-to-grid, zoom, przesuwanie, śledzenie i arrival |
-| Renderowanie | `scene_renderer.*`, `rover_renderer.*` | Proceduralny teren, skały, pojazd, beacon, trasa i g/h/f; bez zmiany mapy |
+| Renderowanie | `scene_renderer.*`, `terrain_art.*`, `world_art.*`, `rover_renderer.*`, `art_primitives.h` | Proceduralny teren i wspólne klify, baza, pojazd, beacon, trasa, minimapa i g/h/f; sortowanie według ciągłego ekranowego Y, bez zmiany mapy |
+| Rover 3D | `rover_3d_pose.*`, `rover_mesh.*`, `rover_renderer.*` | Mapowanie grid → Vector3, sześć kół, macierze części, geometria GPU tworzona raz, Camera3D ORTHOGRAPHIC dopasowana do kamery 2D, shading i bufor głębi; szczegóły w `ROVER_3D.md` |
 | Efekty | `visual_effects.*`, `sandstorm.*`, `sonar.h` | Ślady, ograniczone pule pyłu, warstwy burzy i zegar sonaru |
 | Audio | `audio_system.*`, `drive_audio_synth.*` | Obserwacja stanów, pojedyncze sygnały, ciągły wiatr i napęd, miks i zasoby |
 | UI | `main.cpp`, `terrain_panel.*`, `mission_feedback.*`, `ui_controls.h` | Panel sterowania, formularz, pomoc, podsumowanie i wspólne przyciski |
+| Liquid Glass HUD | `mission_hud.*`, `ui_glass.*`, `ui_controls.*` | Responsywny układ, font, panele i lokalny blur, zakładki, suwaki, przełączniki, ikony i animacje; szczegóły w `UI_GLASS.md` |
 | Presety | `presentation.h` | Trzy konfiguracje zwykłego generatora i prędkości prezentacji |
 
 `main.cpp` łączy moduły i tłumaczy działania użytkownika na wywołania API. Nie zawiera algorytmu wyszukiwania. `Grid` i `AStarSearch` pozostają w jednym niewielkim module; nie wymagają osobnych klas menedżerów. `legacy/astar_original.cpp` to zachowany pierwotny kod autora, wyłączony z kompilacji.

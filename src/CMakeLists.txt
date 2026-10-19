@@ -10,16 +10,20 @@ target_link_libraries(rover_simulation PUBLIC rover_astar)
 add_library(rover_camera world_camera.cpp)
 target_link_libraries(rover_camera PUBLIC rover_astar raylib)
 
-add_library(rover_visuals scene_renderer.cpp visual_effects.cpp rover_renderer.cpp sandstorm.cpp)
-target_link_libraries(rover_visuals PUBLIC rover_simulation rover_camera rover_terrain raylib)
+add_library(rover_ui ui_glass.cpp ui_controls.cpp)
+target_link_libraries(rover_ui PUBLIC raylib)
+target_include_directories(rover_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-add_library(rover_feedback audio_system.cpp drive_audio_synth.cpp mission_feedback.cpp)
+add_library(rover_visuals scene_renderer.cpp terrain_art.cpp world_art.cpp visual_effects.cpp rover_renderer.cpp rover_3d_pose.cpp rover_mesh.cpp sandstorm.cpp)
+target_link_libraries(rover_visuals PUBLIC rover_simulation rover_camera rover_terrain rover_ui raylib)
+
+add_library(rover_feedback audio_system.cpp drive_audio_synth.cpp mission_feedback.cpp mission_hud.cpp)
 target_link_libraries(rover_feedback PUBLIC rover_visuals)
 
 add_executable(mars_rover main.cpp terrain_panel.cpp)
 target_link_libraries(mars_rover PRIVATE rover_feedback)
 
-foreach(target rover_astar rover_terrain rover_simulation rover_camera rover_visuals rover_feedback mars_rover)
+foreach(target rover_astar rover_terrain rover_simulation rover_camera rover_ui rover_visuals rover_feedback mars_rover)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4)
     else()
